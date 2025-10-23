@@ -113,8 +113,6 @@ end
 
 @syms mem(x::Int) stack(x::Int) param(x::Int) reg(r::Int)
 @syms load(r, loc) save(loc, r) load_const(r, val::Float64, idx::Int)
-@syms mov(r, s) call_func(op::Symbol, idx::Int)
-
 
 mutable struct Builder
     eqs::Array{Any}
@@ -175,7 +173,7 @@ function build(t, states, obs, diffs; params = [])
 
     for (lhs, eq) in eqs
         rhs = apply_codify(apply_rewrite(apply_rename(eq)))
-        propagate_root(builder, lhs, rhs)
+        push!(builder.eqs, lhs ~ propagate(builder, rhs))
     end
 
     # logical registers' storage and spill area
@@ -200,24 +198,6 @@ end
 # note that propagation is used in herbiculture sense, measing
 # cutting and re-implasting tree branches
 
-function propagate_root(builder::Builder, lhs, rhs)
-    rhs = value(rhs)
-
-    if iscall(rhs)
-        head = operation(rhs)
-
-        if head == unicall
-            rhs = propagate_unicall(builder, lhs, rhs)
-        elseif head == bincall
-            rhs = propagate_bincall(builder, lhs, rhs)
-        else
-            rhs = propagate(builder, rhs)
-        end
-    end
-
-    push!(builder.eqs, lhs ~ rhs)
-end
-
 function propagate(builder::Builder, eq)
     if iscall(eq)
         head = operation(eq)
@@ -228,10 +208,10 @@ function propagate(builder::Builder, eq)
             return propagate_binop(builder, eq)
         elseif head == ternary
             return propagate_ternary(builder, eq)
-        elseif head == unicall || head == bincall
-            t = new_temp(builder)
-            propagate_root(builder, t, eq)
-            return t
+        elseif head == unicall
+            return propagate_unicall(builder, eq)
+        elseif head == bincall
+            return propagate_bincall(builder, eq)
         else
             error("unreachable section")
         end
@@ -283,15 +263,19 @@ function propagate_ternary(builder::Builder, eq)
     end
 end
 
-function propagate_unicall(builder::Builder, lhs, eq)
+function propagate_unicall(builder::Builder, eq)
     op, x = arguments(eq)
     xx = propagate(builder, x)
-    return unicall(op, xx)
+    t = new_temp(builder)
+    push!(builder.eqs, t ~ unicall(op, xx))
+    return t
 end
 
-function propagate_bincall(builder::Builder, lhs, eq)
+function propagate_bincall(builder::Builder, eq)
     op, x, y = arguments(eq)
     xx = propagate(builder, x)
     yy = propagate(builder, y)
-    return bincall(op, xx, yy)
+    t = new_temp(builder)
+    push!(builder.eqs, t ~ bincall(op, xx, yy))
+    return t
 end

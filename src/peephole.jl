@@ -3,7 +3,9 @@ rules_peephole = [
     @rule load(~x, mem(~idx)) + mov(~y, ~x) => load(~y, mem(~idx))
     @rule save(stack(~idx), ~x) + load(~y, stack(~idx)) => mov(~y, ~x)
     @rule mov(~y, ~x) + save(stack(~idx), ~y) => save(stack(~idx), ~x)
-    @rule mov(~y, ~x) + mov(~z, ~y)  => mov(~z, ~x)
+    @rule mov(~y, ~x) + save(mem(~idx), ~y) => save(mem(~idx), ~x)
+    @rule mov(~y, ~x) + mov(~z, ~y) => mov(~z, ~x)
+    @rule mov(~x, ~x) + ~y => ~y
 ]
 
 apply_peephole(t0, t1) = Chain(rules_peephole)(t0 + t1)

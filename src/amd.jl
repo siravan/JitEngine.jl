@@ -854,7 +854,9 @@ function frac(dst, s1)
 end
 
 function fmov(dst, r1)
-    vmovapd(dst, r1)
+    if dst != r1
+        vmovapd(dst, r1)
+    end
 end
 
 function fmod(dst, s1, s2)

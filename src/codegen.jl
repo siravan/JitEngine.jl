@@ -22,7 +22,7 @@ rules_gen = [
     @rule uniop(~dst, :square, ~x) => Amd.square(θ(~dst), θ(~x))
     @rule uniop(~dst, :cube, ~x) => Amd.cube(θ(~dst), θ(~x))
     @rule uniop(~dst, :sqrt, ~x) => Amd.vsqrtsd(θ(~dst), θ(~x))
-    @rule call_func(~op, ~idx) => Amd.call_op(~op)
+    @rule call_func(~op) => Amd.call_op(~op)
 ]
 
 apply_gen(eq) = Chain(rules_gen)(value(eq))

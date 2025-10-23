@@ -28,6 +28,8 @@ function new_reg(mir::MIR)
     return v
 end
 
+@syms mov(r, s) call_func(op::Symbol)
+
 #
 # lower functions convert a propagated Builder object into
 # an intermediate representation
@@ -139,8 +141,11 @@ end
 
 function lower_unicall(builder::Builder, mir::MIR, eq)
     op, x = arguments(eq)
+
     push!(mir, mov(σ0, lower(builder, mir, x)))
-    push!(mir, call_func(op, find_func_idx(mir, op)))
+
+    add_func(mir, op)
+    push!(mir, call_func(op))
     return push_new_reg!(mir, r -> mov(r, σ0))
 end
 
@@ -155,20 +160,15 @@ function lower_bincall(builder::Builder, mir::MIR, eq)
         push!(mir, mov(σ0, lower(builder, mir, x)))
     end
 
-    push!(mir, call_func(op, find_func_idx(mir, op)))
+    add_func(mir, op)
+    push!(mir, call_func(op))
     return push_new_reg!(mir, r -> mov(r, σ0))
 end
 
-function find_func_idx(mir::MIR, op)
-    idx = findfirst(x -> first(x) == op, mir.vt)
-
-    if idx == nothing
-        f = mir.fp[op]
-        idx = length(mir.vt)
-        push!(mir.vt, (op, f))
+function add_func(mir::MIR, op)
+    if !(op in first.(mir.vt))
+        push!(mir.vt, (op, mir.fp[op]))
     end
-
-    return idx
 end
 
 ###################### Register Allocator ####################
@@ -180,7 +180,7 @@ rules_extract = [
     @rule uniop(~dst, ~op, ~r1) => (~dst, ~r1, ω, ω)
     @rule binop(~dst, ~op, ~r1, ~r2) => (~dst, ~r1, ~r2, ω)
     @rule ternary(~dst, ~r1, ~r2, ~r3) => (~dst, ~r1, ~r2, ~r3)
-    @rule call_func(~op, ~idx) => (σ0, ω, ω, ω)
+    @rule call_func(~op) => (σ0, ω, ω, ω)
     @rule mov(~dst, ~r1) => (~dst, ~r1, ω, ω)
 ]
 
