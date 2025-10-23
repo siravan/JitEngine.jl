@@ -19,6 +19,7 @@ end
 function compile_builder(T, builder)
     mir = lower(builder)
     substitute_registers!(builder, mir)
+    peephole!(mir)
     asm = generate(builder, mir)
 
     mem = zeros(builder.count_states + builder.count_obs + builder.count_diffs + 1)
@@ -51,65 +52,73 @@ end
 #     return compile_model(OdeFunc, model; kw...)
 # end
 
-# function compile_ode(t, states, eqs; params = [], kw...)
-#     model = JSON.json(dictify_ode(states, eqs, t; params))
-#     return compile_model(OdeFunc, model; kw...)
-# end
+function compile_ode(t, states, diffs; params = [], kw...)
+    builder = build(t, states, [], diffs; params)
+    return compile_builder(Lambdify, builder; kw...)
 
-# function symbolize_ode_func(f::Function, t)
-#     u = Inspector("u")
-#     du = Inspector("du")
-#     p = Inspector("p")
+    model = JSON.json(dictify_ode(states, eqs, t; params))
+    return compile_model(OdeFunc, model; kw...)
+end
 
-#     f(du, u, p, t)
+function symbolize_ode_func(f::Function, t)
+    u = Inspector("u")
+    du = Inspector("du")
+    p = Inspector("p")
 
-#     states, _ = linearize(u)
-#     _, eqs = linearize(du)
-#     @assert length(states) == length(eqs)
-#     params, _ = linearize(p)
+    f(du, u, p, t)
 
-#     return states, eqs, params
-# end
+    states, _ = linearize(u)
+    _, diffs = linearize(du)
+    @assert length(states) == length(eqs)
+    params, _ = linearize(p)
 
-# function compile_ode(f::Function; kw...)
-#     @variables t
-#     states, eqs, params = symbolize_ode_func(f, t)
-#     return compile_ode(t, states, eqs; params, kw...)
-# end
+    return states, diffs, params
+end
 
-# function compile_jac(t, states, eqs; params = [], kw...)
-#     n = length(states)
-#     @assert n == length(eqs)
+function compile_ode(f::Function; kw...)
+    @variables t
+    states, diffs, params = symbolize_ode_func(f, t)
+    return compile_ode(t, states, [], diffs; params, kw...)
+end
 
-#     J = Num[]
-#     for eq in eqs
-#         for x in states
-#             deq_x = expand_derivatives(Differential(x)(eq))
-#             push!(J, deq_x)
-#         end
-#     end
+function compile_jac(t, states, diffs; params = [], kw...)
+    n = length(states)
+    @assert n == length(eqs)
 
-#     model = JSON.json(dictify(states, J, t; params))
-#     return compile_model(JacFunc, model; kw...)
-# end
+    J = Num[]
+    for eq in eqs
+        for x in states
+            deq_x = expand_derivatives(Differential(x)(eq))
+            push!(J, deq_x)
+        end
+    end
 
-# function compile_jac(f::Function; kw...)
-#     @variables t
-#     states, eqs, params = symbolize_ode_func(f, t)
-#     return compile_jac(t, states, eqs; params, kw...)
-# end
+    builder = build(t, states, J, []; params)
+    return compile_builder(Lambdify, builder; kw...)
+end
 
-# function compile_func(f::Function; kw...)
-#     F = methods(f)[1]
-#     v = Inspector("v")
-#     states = [v[i] for i = 1:(F.nargs-1)]
-#     obs = f(states...)
-#     model = JSON.json(dictify(states, [obs]))
-#     return compile_model(FastFunc, model; kw...)
-# end
+function compile_jac(f::Function; kw...)
+    @variables t
+    states, diffs, params = symbolize_ode_func(f, t)
+    return compile_jac(t, states, diffs; params, kw...)
+end
+
+function symbolize_func(f::Function)
+    F = methods(f)[1]
+    v = Inspector("v")
+    states = [v[i] for i = 1:(F.nargs-1)]
+    obs = f(states...)
+    return states, obs
+end
+
+function compile_func(f::Function; kw...)
+    states, obs = symbolize_func(f)
+    builder = build(nothing, states, obs, [])
+    return compile_builder(Lambdify, builder; kw...)
+end
 
 function compile_func(states, obs; params = [], kw...)
-    builder = build(states, obs; params)
+    builder = build(nothing, states, obs, []; params)
     return compile_builder(Lambdify, builder; kw...)
 end
 

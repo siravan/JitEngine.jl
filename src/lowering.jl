@@ -1,5 +1,5 @@
 mutable struct MIR
-    fp::Dict{Symbol, Any}
+    fp::Dict{Symbol,Any}
     ir::Vector{Any}
     vt::Vector{Any}
     constants::Vector{Float64}
@@ -156,7 +156,7 @@ function lower_bincall(builder::Builder, mir::MIR, eq)
     end
 
     push!(mir, call_func(op, find_func_idx(mir, op)))
-    return push!(mir, r -> mov(r, σ0))
+    return push_new_reg!(mir, r -> mov(r, σ0))
 end
 
 function find_func_idx(mir::MIR, op)
@@ -190,7 +190,7 @@ apply_extract(eq) = Chain(rules_extract)(value(eq))
 function allocate(mir::MIR)
     pool = (1 << COUNT_SCRATCH - 1) << 2
 
-    regs = Dict{Any, Int}()
+    regs = Dict{Any,Int}()
     regs[σ0] = 0
     regs[σ1] = 1
     S = Set([σ0, σ1, ω])
@@ -234,7 +234,7 @@ function substitute_registers!(builder::Builder, mir::MIR)
     regs = allocate(mir)
     subs = merge(regs, builder.vars)
 
-    for i in 1:length(mir.ir)
+    for i = 1:length(mir.ir)
         mir.ir[i] = substitute(mir.ir[i], subs)
     end
 end

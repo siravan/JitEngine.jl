@@ -40,46 +40,39 @@ _cbrt(x::Float64)::Float64 = cbrt(x)
 _power(x::Float64, y::Float64)::Float64 = x ^ y
 
 function func_pointers()
-    return Dict{Symbol, Any}(
+    return Dict{Symbol,Any}(
         :sin => @cfunction(_sin, Cdouble, (Cdouble,)),
         :cos => @cfunction(_cos, Cdouble, (Cdouble,)),
         :tan => @cfunction(_tan, Cdouble, (Cdouble,)),
         :csc => @cfunction(_csc, Cdouble, (Cdouble,)),
         :sec => @cfunction(_sec, Cdouble, (Cdouble,)),
         :cot => @cfunction(_cot, Cdouble, (Cdouble,)),
-
         :asin => @cfunction(_asin, Cdouble, (Cdouble,)),
         :acos => @cfunction(_acos, Cdouble, (Cdouble,)),
         :atan => @cfunction(_atan, Cdouble, (Cdouble,)),
         :acsc => @cfunction(_acsc, Cdouble, (Cdouble,)),
         :asec => @cfunction(_asec, Cdouble, (Cdouble,)),
         :acot => @cfunction(_acot, Cdouble, (Cdouble,)),
-
         :sinh => @cfunction(_sinh, Cdouble, (Cdouble,)),
         :cosh => @cfunction(_cosh, Cdouble, (Cdouble,)),
         :tanh => @cfunction(_tanh, Cdouble, (Cdouble,)),
         :csch => @cfunction(_csch, Cdouble, (Cdouble,)),
         :sech => @cfunction(_sech, Cdouble, (Cdouble,)),
         :coth => @cfunction(_coth, Cdouble, (Cdouble,)),
-
         :asinh => @cfunction(_asinh, Cdouble, (Cdouble,)),
         :acosh => @cfunction(_acosh, Cdouble, (Cdouble,)),
         :atanh => @cfunction(_atanh, Cdouble, (Cdouble,)),
         :acsch => @cfunction(_acsch, Cdouble, (Cdouble,)),
         :asech => @cfunction(_asech, Cdouble, (Cdouble,)),
         :acoth => @cfunction(_acoth, Cdouble, (Cdouble,)),
-
         :log => @cfunction(_log, Cdouble, (Cdouble,)),
         :log2 => @cfunction(_log2, Cdouble, (Cdouble,)),
         :log10 => @cfunction(_log10, Cdouble, (Cdouble,)),
-
         :exp => @cfunction(_exp, Cdouble, (Cdouble,)),
         :exp2 => @cfunction(_exp2, Cdouble, (Cdouble,)),
         :exp10 => @cfunction(_exp10, Cdouble, (Cdouble,)),
-
         :sqrt => @cfunction(_sqrt, Cdouble, (Cdouble,)),
         :cbrt => @cfunction(_cbrt, Cdouble, (Cdouble,)),
-
         :power => @cfunction(_power, Cdouble, (Cdouble, Cdouble)),
     )
 end

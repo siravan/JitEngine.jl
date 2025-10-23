@@ -18,14 +18,15 @@ const SPILL_AREA = 16
 include("code.jl")
 include("builder.jl")
 include("lowering.jl")
+include("peephole.jl")
 include("codegen.jl")
 
 include("memory.jl")
 include("inspector.jl")
 include("engine.jl")
 
-function generate_func(states, obs; params=nothing)
-    builder = build(states, obs; params)
+function generate_func(states, obs; params = [])
+    builder = build(nothing, states, obs, []; params)
     mir = lower(builder)
     substitute_registers!(builder, mir)
     code = generate(builder, mir)

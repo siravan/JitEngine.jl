@@ -792,7 +792,6 @@ const TEMP = 1
 const PAGE_SIZE = 4096
 
 function load_const(dst, idx)
-    println("load_const", dst, ", ", idx)
     label = "_const_$(idx)_"
     vmovsd_xmm_label(dst, label)
 end
@@ -897,7 +896,7 @@ function powi(dst, s1, power)
             n >>= 1
         end
 
-        for i in 1:t
+        for i = 1:t
             vmulsd(dst, dst, dst)
         end
     else

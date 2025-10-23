@@ -1,11 +1,12 @@
 mutable struct Assembler
     buf::Vector{UInt8}
-    labels::Dict{String, Int}
+    labels::Dict{String,Int}
     jumps::Vector{Any}
     delta::Int
     shift::Int
 
-    Assembler(delta, shift) = new(Vector{UInt8}[], Dict{String, Int}(), Vector{Any}(), delta, shift)
+    Assembler(delta, shift) =
+        new(Vector{UInt8}[], Dict{String,Int}(), Vector{Any}(), delta, shift)
 end
 
 function bytes()
@@ -26,7 +27,7 @@ end
 
 function append_word(u)
     # appends u (uint32) as little-endian
-    for i in 1:4
+    for i = 1:4
         append_byte(u & 0xff)
         u >>= 8
     end
@@ -34,7 +35,7 @@ end
 
 function append_quad(u)
     # appends u (uint32) as little-endian
-    for i in 1:8
+    for i = 1:8
         append_byte(u & 0xff)
         u >>= 8
     end
@@ -74,8 +75,8 @@ function apply_jumps()
         x = (offset << asm.shift) | code
 
         asm.buf[k] |= (x & 0xff)
-        asm.buf[k + 1] |= (x >> 8) & 0xff
-        asm.buf[k + 2] |= (x >> 16) & 0xff
-        asm.buf[k + 3] |= (x >> 24) & 0xff
+        asm.buf[k+1] |= (x >> 8) & 0xff
+        asm.buf[k+2] |= (x >> 16) & 0xff
+        asm.buf[k+3] |= (x >> 24) & 0xff
     end
 end
