@@ -37,7 +37,7 @@ function save_d_to_mem(d, base, idx)
 end
 
 function load_x_from_mem(r, base, idx)
-    @assert r != 9
+    @assert r != SCRATCH1
 
     if idx < 4096
         ldr_x(r, base, 8 * idx)
@@ -48,22 +48,22 @@ function load_x_from_mem(r, base, idx)
 end
 
 function sub_stack(size)
-    sub(:sp, :sp, size & 0x0fff)
+    sub_x_imm(:sp, :sp, size & 0x0fff)
     if size >> 12 != 0
-        sub(:sp, :sp, size >> 12, true)
+        sub_x_imm(:sp, :sp, size >> 12, true)
     end
 end
 
 function add_stack(size)
     if size >> 12 != 0
-        add(:sp, :sp, size >> 12, true)
+        add_x_imm(:sp, :sp, size >> 12, true)
     end
-    add(:sp, :sp, size & 0x0fff)
+    add_x_imm(:sp, :sp, size & 0x0fff)
 end
 
 function load_const(dst, idx)
     label = "_const_$(idx)_"
-    ldr_d(dst, label)
+    ldr_d_label(dst, label)
 end
 
 function load_mem(dst, idx)
@@ -91,7 +91,7 @@ function save_stack(dst, idx)
 end
 
 function neg(dst, s1)
-    return fneg(dst, s1)
+    fneg(dst, s1)
 end
 
 function fcmne(dst, s1, s2)
@@ -100,7 +100,7 @@ function fcmne(dst, s1, s2)
 end
 
 function abs(dst, s1)
-    return fabs(dst, s1)
+    fabs(dst, s1)
 end
 
 function recip(dst, s1)
@@ -109,15 +109,15 @@ function recip(dst, s1)
 end
 
 function floor(dst, s1)
-    return frintm(dst, s1)
+    frintm(dst, s1)
 end
 
 function round(dst, s1)
-    return frinti(dst, s1)
+    frinti(dst, s1)
 end
 
 function ceiling(dst, s1)
-    return frintp(dst, s1)
+    frintp(dst, s1)
 end
 
 function frac(dst, s1)
@@ -193,8 +193,11 @@ end
 
 function call_op(op)
     label = "_func_$(op)_"
-    ldr_x(0, label)
+    ldr_x_label(0, label)
     blr(0)
+end
+
+function align()
 end
 
 function predefined_consts()
@@ -215,7 +218,7 @@ function seal()
 end
 
 function prologue(cap)
-    sub(:sp, :sp, 48)
+    sub_x_imm(:sp, :sp, 48)
     str_x(:lr, :sp, 0)
     str_x(MEM, :sp, 8)
     str_x(PARAMS, :sp, 16)
@@ -238,9 +241,9 @@ function epilogue(cap)
     # ldr_x(IDX, :sp, 32)
     # ldr_x(STATES, :sp, 24)
     ldr_x(PARAMS, :sp, 16)
-    ldr_x(MEM, sp, 8)
+    ldr_x(MEM, :sp, 8)
     ldr_x(:lr, :sp, 0)
 
-    add(:sp, :sp, 48)
+    add_x_imm(:sp, :sp, 48)
     ret()
 end

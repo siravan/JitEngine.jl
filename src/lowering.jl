@@ -206,7 +206,7 @@ function lower_bincall(mir::MIR, eq)
 
     add_func(mir, op)
     push!(mir, call_func(op))
-    return push_new_reg!(mir, r -> mov(r, σ0))
+    return push_new_reg!(mir, r -> mov(r, σ0)), Real
 end
 
 function add_func(mir::MIR, op)

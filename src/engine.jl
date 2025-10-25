@@ -62,14 +62,17 @@ end
 ###################### compile_* functions ###############################
 
 function compile_sys(sys; kw...)
-    builder = Builder(
-        ModelingToolkit.get_iv(sys),
-        ModelingToolkit.unknowns(sys),
-        ModelingToolkit.observed(sys),
-        ModelingToolkit.get_diff_eqs(sys);
-        params = ModelingToolkit.parameters(sys),
-        kw...
-    )
+    iv = ModelingToolkit.get_iv(sys)
+    unknowns = ModelingToolkit.unknowns(sys)
+    diff_eqs = ModelingToolkit.get_diff_eqs(sys)
+    params = ModelingToolkit.parameters(sys)
+
+    x = Inspector("x")
+    states = [x[i] for i in enumerate(unknowns)]
+    D = Dict(v => x for (v, x) in zip(unknowns, states))
+    diffs = [substitute(eq.rhs, D) for eq in diff_eqs]
+
+    builder = Builder(iv, states, [], diffs; params, kw...)
     return compile_builder(OdeFunc, builder; kw...)
 end
 
