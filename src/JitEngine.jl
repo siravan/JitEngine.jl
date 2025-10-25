@@ -4,16 +4,46 @@ using SymbolicUtils
 using SymbolicUtils.Rewriters
 using Symbolics
 using Symbolics: value
+using ModelingToolkit
+
+export compile_func, compile_ode, compile_jac
 
 module Amd
-include("assembler.jl")
-include("amd.jl")
+    @static if Sys.ARCH == :x86_64
+        include("assembler.jl")
+        include("amd/amd.jl")
+    end
 end
-
 using .Amd
 
-const COUNT_SCRATCH = 14
-const SPILL_AREA = 16
+module Arm
+    @static if Sys.ARCH == :aarch64
+        include("assembler.jl")
+        include("arm/arm.jl")
+    end
+end
+using .Arm
+
+@static if Sys.ARCH == :x86_64
+    Cpu = Amd
+
+    if Sys.iswindows()
+        const CLOBBERED_REGS = 6
+    elseif Sys.isunix()
+        const CLOBBERED_REGS = 16
+    else
+        const CLOBBERED_REGS = 16
+        @warn "unrecognized os"
+    end
+elseif Sys.ARCH == :aarch64
+    Cpu = Arm
+    const CLOBBERED_REGS = 8
+else
+    const CLOBBERED_REGS = 16
+    @warn "unrecognized architecture: $(Sys.ARCH)"
+end
+
+const LOGICAL_REGS = 16
 
 include("code.jl")
 include("builder.jl")
@@ -24,13 +54,5 @@ include("codegen.jl")
 include("memory.jl")
 include("inspector.jl")
 include("engine.jl")
-
-function generate_func(states, obs; params = [])
-    builder = build(nothing, states, obs, []; params)
-    mir = lower(builder)
-    substitute_registers!(builder, mir)
-    code = generate(builder, mir)
-    return code
-end
 
 end

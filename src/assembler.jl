@@ -17,12 +17,14 @@ end
 function append_byte(b)
     global asm
     push!(asm.buf, b)
+    return 1
 end
 
 function append_bytes(bs)
     for b in bs
         append_byte(b)
     end
+    return length(bs)
 end
 
 function append_word(u)
@@ -31,6 +33,7 @@ function append_word(u)
         append_byte(u & 0xff)
         u >>= 8
     end
+    return 4
 end
 
 function append_quad(u)
@@ -39,10 +42,12 @@ function append_quad(u)
         append_byte(u & 0xff)
         u >>= 8
     end
+    return 8
 end
 
 function ip()
     global asm
+    # + 1 because of Julia 1-indexing
     return length(asm.buf) + 1
 end
 
@@ -50,6 +55,7 @@ function set_label(label)
     global asm
     @assert !haskey(asm.labels, label)
     asm.labels[label] = ip()
+    return ip()
 end
 
 function jump(label, code)

@@ -33,7 +33,7 @@ apply_rename(eq) = Postwalk(PassThrough(Chain(rules_rename)))(value(eq))
 
 ################### Rewrite Operators #######################
 
-@syms neg(x) square(x) cube(x) sqrt(x) cbrt(x) powi(x, p::Int)
+@syms neg(x) square(x) cube(x) sqrt(x) cbrt(x) not(x)
 
 rules_rewrite = [
     @rule times(~x, -1.0) => neg(~x)
@@ -50,7 +50,7 @@ rules_rewrite = [
     @rule power(~x, 0.5) => sqrt(~x)
     @rule power(~x, 1/3) => cbrt(~x)
     @rule power(~x, -0.5) => divide(1.0, sqrt(~x))
-    @rule power(~x, ~p::is_integer) => powi(~x, ~p)
+    @rule !(~x) => not(~x)
 ]
 
 
@@ -62,25 +62,7 @@ apply_rewrite(eq) = Postwalk(PassThrough(Chain(rules_rewrite)))(value(eq))
 # In the early stages, it is the ershov numner
 # When IR is emitted, it is the destination
 @syms uniop(e, op::Symbol, x) binop(e, op::Symbol, x, y) ternary(e, cond, x, y)
-@syms unicall(op::Symbol, x) bincall(op::Symbol, x, y)
-
-function ershov(x)
-    x = value(x)
-
-    if iscall(x) && (operation(x) == uniop || operation(x) == binop)
-        return first(arguments(x))
-    else
-        return 1
-    end
-end
-
-function calc_ershov(x1, x2)
-    e1 = ershov(x1)
-    e2 = ershov(x2)
-    return e1 == e2 ? e1 + 1 : max(e1, e2)
-end
-
-calc_ershov(x1, x2, x3) = calc_ershov(calc_ershov(x1, x2), x3)
+@syms unicall(op::Symbol, x) bincall(op::Symbol, x, y) powi(p::Int)::Symbol
 
 rules_codify = [
     @rule plus(~x, ~y) => binop(0, :plus, ~x, ~y)
@@ -94,9 +76,10 @@ rules_codify = [
     @rule eq(~x, ~y) => binop(0, :eq, ~x, ~y)
     @rule neq(~x, ~y) => binop(0, :neq, ~x, ~y)
     @rule power(ℯ, ~y) => unicall(:exp, ~y)
+    @rule power(~x, ~p::is_integer) => uniop(0, powi(~p), ~x)
     @rule power(~x, ~y) => bincall(:power, ~x, ~y)
-    @rule powi(~x, ~p) => binop(0, :powi, ~x, ~p)
     @rule neg(~x) => uniop(0, :neg, ~x)
+    @rule not(~x) => uniop(0, :not, ~x)
     @rule square(~x) => uniop(0, :square, ~x)
     @rule cube(~x) => uniop(0, :cube, ~x)
     @rule sqrt(~x) => uniop(0, :sqrt, ~x)
@@ -119,11 +102,9 @@ mutable struct Builder
     vars::Dict{Any,Any}
     count_states::Int
     count_obs::Int
-    count_params::Int
     count_diffs::Int
+    count_params::Int
     count_temps::Int
-
-    # Builder() = new(Any[], Dict(), 0, 0, 0, 0, 0)
 end
 
 function add_mem!(vars, v)
@@ -138,7 +119,17 @@ function new_var!(vars, name)
     return v
 end
 
-function build(t, states, obs, diffs; params = [])
+# Builder is a constructor and the main entry point to the JIT compiler.
+#
+# Inputs:
+#   t:  the independent variable or nothing
+#   states: the list of state variables
+#   obs: the list of algebraic equations (only the RHS). It can be empty.
+#   diffs: the list of differential equations, each one corresponding to
+#       a single state variable. It can be empty.
+#   params: (optional)
+#
+function Builder(t, states, obs, diffs; params = [])
     eqs = Any[]
     vars = Dict()
 
@@ -177,20 +168,11 @@ function build(t, states, obs, diffs; params = [])
     end
 
     # logical registers' storage and spill area
-    for i = 1:SPILL_AREA
-        new_temp(builder)
-    end
+    # for i = 1:SPILL_AREA
+    #     new_temp(builder)
+    # end
 
     return builder
-end
-
-function new_temp(builder::Builder)
-    n = builder.count_temps
-    sym = Symbol("θ$n")
-    v = (@variables $sym)[1]
-    builder.vars[v] = stack(n)
-    builder.count_temps += 1
-    return v
 end
 
 ################### Propagation ##########################
@@ -222,23 +204,25 @@ end
 
 function propagate_uniop(builder::Builder, eq)
     e, op, x = arguments(eq)
-    @assert e == 0
-    xx = propagate(builder, x)
-    e = ershov(xx)
-    return uniop(e, op, xx)
+    x = propagate(builder, x)
+    e = ershov(x)
+    return uniop(e, op, x)
 end
 
 function propagate_binop(builder::Builder, eq)
     e, op, x, y = arguments(eq)
-    @assert e == 0
-    xx = propagate(builder, x)
-    yy = propagate(builder, y)
-    e = calc_ershov(xx, yy)
-    u = binop(e, op, xx, yy)
+    x = propagate(builder, x)
+    y = propagate(builder, y)
+    e = calc_ershov(x, y)
+    u = binop(e, op, x, y)
 
-    if e < COUNT_SCRATCH
+    if e < (LOGICAL_REGS - 2)
         return u
     else
+        # we need to break the tree and introduce a new
+        # temporary variable here to ensure register
+        # allocation algorithm does not run out of registers.
+        # This is part of the Sethi–Ullman algorithm.
         t = new_temp(builder)
         push!(builder.eqs, t ~ u)
         return t
@@ -247,35 +231,67 @@ end
 
 function propagate_ternary(builder::Builder, eq)
     e, cond, x, y = arguments(eq)
-    @assert e == 0
     cond = propagate(builder, cond)
-    xx = propagate(builder, x)
-    yy = propagate(builder, y)
-    e = calc_ershov(cond, xx, yy)
-    u = ternary(e, cond, xx, yy)
+    x = propagate(builder, x)
+    y = propagate(builder, y)
+    e = calc_ershov(cond, x, y)
+    u = ternary(e, cond, x, y)
 
-    if e < COUNT_SCRATCH
+    if e < (LOGICAL_REGS - 2)
         return u
     else
+        # see comment in propagate_unicall
         t = new_temp(builder)
         push!(builder.eqs, t ~ u)
         return t
     end
 end
 
+# unicall and bincall always create a new temporary variable
+# in the stack because remote calls do not preserve callee-saved
+# registers
 function propagate_unicall(builder::Builder, eq)
     op, x = arguments(eq)
-    xx = propagate(builder, x)
+    x = propagate(builder, x)
     t = new_temp(builder)
-    push!(builder.eqs, t ~ unicall(op, xx))
+    push!(builder.eqs, t ~ unicall(op, x))
     return t
 end
 
 function propagate_bincall(builder::Builder, eq)
     op, x, y = arguments(eq)
-    xx = propagate(builder, x)
-    yy = propagate(builder, y)
+    x = propagate(builder, x)
+    y = propagate(builder, y)
     t = new_temp(builder)
-    push!(builder.eqs, t ~ bincall(op, xx, yy))
+    push!(builder.eqs, t ~ bincall(op, x, y))
     return t
+end
+
+######################### Utils ###########################
+
+function ershov(x)
+    x = value(x)
+
+    if iscall(x) && (operation(x) == uniop || operation(x) == binop)
+        return first(arguments(x))
+    else
+        return 1
+    end
+end
+
+function calc_ershov(x1, x2)
+    e1 = ershov(x1)
+    e2 = ershov(x2)
+    return e1 == e2 ? e1 + 1 : max(e1, e2)
+end
+
+calc_ershov(x1, x2, x3) = calc_ershov(calc_ershov(x1, x2), x3)
+
+function new_temp(builder::Builder)
+    n = builder.count_temps
+    sym = Symbol("θ$n")
+    v = (@variables $sym)[1]
+    builder.vars[v] = stack(n)
+    builder.count_temps += 1
+    return v
 end
