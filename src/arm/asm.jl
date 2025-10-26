@@ -10,7 +10,7 @@ function reg(s::Symbol)
     end
 end
 
-reg(x::T) where T <: Integer = x
+reg(x::T) where {T<:Integer} = x
 
 function rd!(x)
     x = reg(x)
@@ -76,7 +76,7 @@ movz(rd, imm16) = append_word(0xd2800000 | rd!(rd) | imm16!(imm16))
 # single register load/store instructions
 # ldr d(rd), [x(rn), #ofs]
 # # ldr d(rd), [x(rn), x(rm), lsl #3]
-function ldr_d(rd, rn, ofs, lsl=false)
+function ldr_d(rd, rn, ofs, lsl = false)
     if lsl
         w = 0xfc607800 | rd!(rd) | rn!(rn) | rm!(rm)
     else
@@ -99,7 +99,7 @@ ldr_x_label(rd, label) = jump(label, 0x58000000 | rd!(rd))
 
 # str d(rd), [x(rn), #ofs:expr]
 # str d(rd), [x(rn), x(rm), lsl #3]
-function str_d(rd, rn, ofs, lsl=false)
+function str_d(rd, rn, ofs, lsl = false)
     if lsl
         w = 0xfc207800 | rd!(rd) | rn!(rn) | rm!(rm)
     else
@@ -113,22 +113,26 @@ str_x(rd, rn, ofs) = append_word(0xf9000000 | rd!(rd) | rn!(rn) | ofs!(ofs))
 
 # paired-registers load/store instructions
 # ldp d(rd), d(rd2), [x(rn), #of7]
-ldp_d(rd, rd2, rn, of7) = append_word(0x6d400000 | rd!(rd) | rd2!(rd2) | rn!(rn) | of7!(of7))
+ldp_d(rd, rd2, rn, of7) =
+    append_word(0x6d400000 | rd!(rd) | rd2!(rd2) | rn!(rn) | of7!(of7))
 
 # ldp x(rd), x(rd2), [x(rn), #of7]
-ldp_x(rd, rd2, rn, of7) = append_word(0xa9400000 | rd!(rd) | rd2!(rd2) | rn!(rn) | of7!(of7))
+ldp_x(rd, rd2, rn, of7) =
+    append_word(0xa9400000 | rd!(rd) | rd2!(rd2) | rn!(rn) | of7!(of7))
 
 # stp d(rd), d(rd2), [x(rn), #of7]
-stp_d(rd, rd2, rn, of7) = append_word(0x6d000000 | rd!(rd) | rd2!(rd2) | rn!(rn) | of7!(of7))
+stp_d(rd, rd2, rn, of7) =
+    append_word(0x6d000000 | rd!(rd) | rd2!(rd2) | rn!(rn) | of7!(of7))
 
 # stp x(rd), x(rd2), [x(rn), #$of7:expr]
-stp_x(rd, rd2, rn, of7) = append_word(0xa9000000 | rd!(rd) | rd2!(rd2) | rn!(rn) | of7!(of7))
+stp_x(rd, rd2, rn, of7) =
+    append_word(0xa9000000 | rd!(rd) | rd2!(rd2) | rn!(rn) | of7!(of7))
 
 # x-registers immediate ops
 #
 # add x(rd), x(rn), #imm
 # add x(rd), x(rn), #imm, lsl #12
-function add_x_imm(rd, rn, imm, lsl=false)
+function add_x_imm(rd, rn, imm, lsl = false)
     if lsl
         w = 0x91400000 | rd!(rd) | rn!(rn) | imm!(imm)
     else
@@ -139,7 +143,7 @@ end
 
 # sub x(rd), x(rn), #imm
 # sub x(rd), x(rn), #imm, lsl #12
-function sub_x_imm(rd, rn, imm, lsl=false)
+function sub_x_imm(rd, rn, imm, lsl = false)
     if lsl
         w = 0xd1400000 | rd!(rd) | rn!(rn) | imm!(imm)
     else

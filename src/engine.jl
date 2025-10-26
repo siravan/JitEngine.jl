@@ -13,11 +13,11 @@ mutable struct Func{T}
     count_params::Int
     count_obs::Int
     count_diffs::Int
-    mir::Union{MIR, Nothing}
+    mir::Union{MIR,Nothing}
 end
 
 
-function compile_builder(T, builder; keep_ir=:no, peephole=true)
+function compile_builder(T, builder; keep_ir = :no, peephole = true)
     # lower builder into an intermediate representation
     mir = lower(builder)
     saved_mir = nothing
@@ -61,18 +61,35 @@ end
 
 ###################### compile_* functions ###############################
 
-function compile_sys(sys; kw...)
+function symbolize_sys(sys)
     iv = ModelingToolkit.get_iv(sys)
     unknowns = ModelingToolkit.unknowns(sys)
     diff_eqs = ModelingToolkit.get_diff_eqs(sys)
+    observed = ModelingToolkit.get_observed(sys)
     params = ModelingToolkit.parameters(sys)
+
+    D = Differential(iv)
+    @assert all([isequal(D(v), eq.lhs) for (v, eq) in zip(unknowns, diff_eqs)])
 
     x = Inspector("x")
     states = [x[i] for i in enumerate(unknowns)]
-    D = Dict(v => x for (v, x) in zip(unknowns, states))
-    diffs = [substitute(eq.rhs, D) for eq in diff_eqs]
+    μ1 = Dict(v => x for (v, x) in zip(unknowns, states))
 
-    builder = Builder(iv, states, [], diffs; params, kw...)
+    y = Inspector("y")
+    vars = [y[i] for i in enumerate(observed)]
+    μ2 = Dict(eq.lhs => y for (eq, y) in zip(observed, vars))
+
+    μ = union(μ1, μ2)
+
+    diffs = [substitute(eq.rhs, μ) for eq in diff_eqs]
+    obs = [substitute(eq.lhs, μ) ~ substitute(eq.rhs, μ) for eq in observed]
+
+    return iv, states, obs, diffs, params
+end
+
+function compile_sys(sys; kw...)
+    iv, states, obs, diffs, params = symbolize_sys(sys)
+    builder = Builder(iv, states, obs, diffs; params, kw...)
     return compile_builder(OdeFunc, builder; kw...)
 end
 
@@ -178,7 +195,8 @@ function (func::Func{Lambdify})(
     for i = 1:n
         @inbounds func.mem[1:func.count_states] .= u[i, :]
         call(func.code, func.mem, func.params)
-        @inbounds obs[i, :] .= func.mem[(func.count_states+2):(func.count_states+func.count_obs+1)]
+        @inbounds obs[i, :] .=
+            func.mem[(func.count_states+2):(func.count_states+func.count_obs+1)]
     end
 
     return obs

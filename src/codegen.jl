@@ -1,4 +1,4 @@
-θ(x) = Int(value(x))
+θ(x) = Int(value(x))    # phyiscal register number
 
 rules_gen_amd = [
     @rule load(~dst, mem(~idx)) => Amd.load_mem(θ(~dst), θ(~idx))
@@ -28,7 +28,8 @@ rules_gen_amd = [
     @rule uniop(~dst, :cube, ~x) => Amd.cube(θ(~dst), θ(~x))
     @rule uniop(~dst, :sqrt, ~x) => Amd.vsqrtsd(θ(~dst), θ(~x))
     @rule uniop(~dst, powi(~p), ~x) => Amd.powi(θ(~dst), θ(~x), ~p)
-    @rule ternary(~dst, ~cond, ~x, ~y) => Amd.select_if(θ(~dst), θ(~cond), θ(~x), θ(~y))
+    @rule ternary(~dst, ~cond, ~x, ~y) =>
+        Amd.select_if(θ(~dst), θ(~cond), θ(~x), θ(~y))
     @rule call_func(~op) => Amd.call_op(~op)
 ]
 
@@ -60,7 +61,8 @@ rules_gen_arm = [
     @rule uniop(~dst, :cube, ~x) => Arm.cube(θ(~dst), θ(~x))
     @rule uniop(~dst, :sqrt, ~x) => Arm.fsqrt(θ(~dst), θ(~x))
     @rule uniop(~dst, powi(~p), ~x) => Arm.powi(θ(~dst), θ(~x), ~p)
-    @rule ternary(~dst, ~cond, ~x, ~y) => Arm.select_if(θ(~dst), θ(~cond), θ(~x), θ(~y))
+    @rule ternary(~dst, ~cond, ~x, ~y) =>
+        Arm.select_if(θ(~dst), θ(~cond), θ(~x), θ(~y))
     @rule call_func(~op) => Arm.call_op(~op)
 ]
 
@@ -91,9 +93,7 @@ function generate(builder::Builder, mir::MIR)
     end
 
     for t in mir.ir
-        if apply_gen(t) == nothing
-            error("unrecognized IR: $t")
-        end
+        apply_gen(t)
     end
 
     for (reg, loc) in saved
@@ -120,7 +120,7 @@ end
 function list_registers_to_save(builder::Builder, mir::MIR)
     saved = []
 
-    for i in CLOBBERED_REGS:LOGICAL_REGS
+    for i = CLOBBERED_REGS:LOGICAL_REGS
         if i in mir.used_regs
             push!(saved, (i, stack(builder.count_temps)))
             builder.count_temps += 1

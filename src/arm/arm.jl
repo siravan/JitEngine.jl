@@ -197,11 +197,9 @@ function call_op(op)
     blr(0)
 end
 
-function align()
-end
+function align() end
 
-function predefined_consts()
-end
+function predefined_consts() end
 
 # aligns at a multiple of 32 (to cover different ABIs)
 function align_stack(n)

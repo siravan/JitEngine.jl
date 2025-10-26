@@ -4,6 +4,7 @@ is_number(x::T) where {T<:Float32} = true
 is_number(x::T) where {T<:Float64} = true
 is_number(x::T) where {T<:Complex} = true
 is_number(x::T) where {T<:Rational} = true
+is_number(x::T) where {T<:Irrational} = true
 is_number(x) = false
 
 is_proper(x) = is_number(x) && !isnan(x) && !isinf(x)
@@ -35,6 +36,10 @@ apply_rename(eq) = Postwalk(PassThrough(Chain(rules_rename)))(value(eq))
 
 @syms neg(x) square(x) cube(x) sqrt(x) cbrt(x) not(x)
 
+function approximately(val::Number)
+   return x -> value(x) isa Real ? value(x) ≈ val : false
+end
+
 rules_rewrite = [
     @rule times(~x, -1.0) => neg(~x)
     @rule times(-1.0, ~x) => neg(~x)
@@ -48,8 +53,9 @@ rules_rewrite = [
     @rule power(~x, -2) => divide(1.0, square(~x))
     @rule power(~x, -3) => divide(1.0, cube(~x))
     @rule power(~x, 0.5) => sqrt(~x)
-    @rule power(~x, 1/3) => cbrt(~x)
+    @rule power(~x, ~p::approximately(1/3)) => cbrt(~x)
     @rule power(~x, -0.5) => divide(1.0, sqrt(~x))
+    @rule power(~x, ~p::approximately(-1/3)) => divide(1.0, cbrt(~x))
     @rule !(~x) => not(~x)
 ]
 
@@ -69,6 +75,7 @@ rules_codify = [
     @rule times(~x, ~y) => binop(0, :times, ~x, ~y)
     @rule minus(~x, ~y) => binop(0, :minus, ~x, ~y)
     @rule divide(~x, ~y) => binop(0, :divide, ~x, ~y)
+    @rule rem(~x, ~y) => binop(0, :rem, ~x, ~y)
     @rule lt(~x, ~y) => binop(0, :lt, ~x, ~y)
     @rule leq(~x, ~y) => binop(0, :leq, ~x, ~y)
     @rule gt(~x, ~y) => binop(0, :gt, ~x, ~y)
@@ -144,8 +151,13 @@ function Builder(t, states, obs, diffs; params = [])
     end
 
     for (i, eq) in enumerate(obs)
-        v = new_var!(vars, "Ψ$(i-1)")
-        push!(eqs, (v, eq))
+        if eq isa Equation
+            add_mem!(vars, eq.lhs)
+            push!(eqs, (eq.lhs, eq.rhs))
+        else
+            v = new_var!(vars, "Ψ$(i-1)")
+            push!(eqs, (v, eq))
+        end
     end
 
     @assert isempty(diffs) || length(diffs) == length(states)

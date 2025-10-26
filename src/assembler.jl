@@ -70,14 +70,6 @@ function apply_jumps()
         target = asm.labels[label]
         offset = target - k + asm.delta
 
-        # TODO: we need a better place for this check
-        # assembler is supposed to be arch agnostic
-        #[cfg(target_arch = "aarch64")]
-        #    assert!(
-        #        offset >= 0 && offset < (1 << 20),
-        #        "the code segment is too large!"
-        #    )
-
         x = (offset << asm.shift) | code
 
         asm.buf[k] |= (x & 0xff)

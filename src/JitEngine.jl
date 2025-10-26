@@ -9,18 +9,18 @@ using ModelingToolkit
 export compile_func, compile_ode, compile_jac
 
 module Amd
-    @static if Sys.ARCH == :x86_64
-        include("assembler.jl")
-        include("amd/amd.jl")
-    end
+@static if Sys.ARCH == :x86_64
+    include("assembler.jl")
+    include("amd/amd.jl")
+end
 end
 using .Amd
 
 module Arm
-    @static if Sys.ARCH == :aarch64
-        include("assembler.jl")
-        include("arm/arm.jl")
-    end
+@static if Sys.ARCH == :aarch64
+    include("assembler.jl")
+    include("arm/arm.jl")
+end
 end
 using .Arm
 
@@ -45,7 +45,7 @@ end
 
 const LOGICAL_REGS = 16
 
-include("code.jl")
+include("mathlib.jl")
 include("builder.jl")
 include("lowering.jl")
 include("peephole.jl")

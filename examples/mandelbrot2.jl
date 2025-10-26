@@ -18,8 +18,8 @@ for i = 1:N
     end
 end
 
-for i in 1:20
-   X .= f(X)
+for i = 1:20
+    X .= f(X)
 end
 
 m = reshape(hypot.(X[:, 3], X[:, 4]), (N, N))
