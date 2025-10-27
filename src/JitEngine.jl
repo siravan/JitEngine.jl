@@ -5,6 +5,7 @@ using SymbolicUtils.Rewriters
 using Symbolics
 using Symbolics: value
 using ModelingToolkit
+using PrecompileTools: @setup_workload, @compile_workload
 
 export compile_func, compile_ode, compile_jac
 
@@ -54,5 +55,24 @@ include("codegen.jl")
 include("memory.jl")
 include("inspector.jl")
 include("engine.jl")
+
+@setup_workload begin
+    @variables x y t β
+    u = [0.0, 1.0]
+    du = zeros(2)
+    J = zeros(2, 2)
+    @compile_workload begin
+        f = compile_func([x, y], [x+y, x*y])
+        f([2, 3])
+        f = compile_func([x, y], [x-y, x/y, x%y])
+        f([10, 3])
+        f = compile_func((x, y) -> asin(sin(x)) + exp(log(x+y)) + x^y)
+        f(0.5, 2)
+        f = compile_ode(t, [x, y], [β*y, -β*x]; params=[β])
+        f(du, u, [2.0], 0.0)
+        f = compile_jac(t, [x, y], [β*y, -β*x]; params=[β])
+        f(J, u, [2.0], 0.0)
+    end
+end
 
 end
