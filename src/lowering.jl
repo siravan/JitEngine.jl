@@ -77,6 +77,8 @@ function lower(mir::MIR, eq)
             return lower_unicall(mir, eq)
         elseif head == bincall
             return lower_bincall(mir, eq)
+        elseif head == getindex
+            return lower_terminal(mir, eq)
         end
     else
         return lower_terminal(mir, eq)

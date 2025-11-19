@@ -3,7 +3,7 @@ module JitEngine
 using SymbolicUtils
 using SymbolicUtils.Rewriters
 using Symbolics
-using Symbolics: value, scalarize, is_array_of_symbolics
+using Symbolics: value, scalarize, is_array_of_symbolics, unwrap
 using ModelingToolkit
 using PrecompileTools: @setup_workload, @compile_workload
 

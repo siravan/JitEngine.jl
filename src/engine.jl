@@ -44,7 +44,7 @@ function compile_build(T, builder::Builder; keep_ir = :no, peephole = true)
 
     # generate machine code
     asm = generate(builder, mir)
-    mem = zeros(builder.count_states + builder.count_obs + builder.count_diffs + 1)
+    mem = zeros(length(builder.vars))
     params = zeros(builder.count_params)
     code = create_executable_memory(asm)
 
@@ -70,8 +70,13 @@ end
 function create_views(mem, idxs)
     views = []
 
-    for idx in idxs
-        push!(views, @view mem[idx])
+    for (idx, shape) in idxs
+        if shape == ()
+            push!(views, @view mem[idx])
+        else
+            v = @view mem[idx:idx+prod(shape)-1]
+            push!(views, reshape(v, shape))
+        end
     end
 
     return views
@@ -177,8 +182,12 @@ function compile_func(f::Function; kw...)
 end
 
 function compile_func(states, obs; params = [], kw...)
-    builder = build(nothing, states, obs, []; params)
-    return compile_build(Lambdify, builder; kw...)
+    if any(Symbolics.is_array_of_symbolics, states)
+        return compile_func_vectorized(states, obs; params = [], kw...)
+    else
+        builder = build(nothing, states, obs, []; params)
+        return compile_build(Lambdify, builder; kw...)
+    end
 end
 
 function compile_func_vectorized(states, obs; params = [], kw...)
@@ -229,29 +238,29 @@ end
 #     return func.mem[(func.count_states+2):(func.count_states+func.count_obs+1)]
 # end
 
-# function (func::Func{Lambdify})(
-#     u::Matrix{T},
-#     p = nothing;
-#     copy_matrix = true,
-# ) where {T<:Number}
-#     if p != nothing
-#         func.params .= p
-#     end
+function (func::Func{Lambdify})(
+    u::Matrix{T},
+    p = nothing;
+    copy_matrix = true,
+) where {T<:Number}
+    if p != nothing
+        func.params .= p
+    end
 
-#     @assert size(u, 2) == func.count_states
+    @assert size(u, 2) == func.count_states
 
-#     n = size(u, 1)
-#     obs = zeros(n, func.count_obs)
+    n = size(u, 1)
+    obs = zeros(n, func.count_obs)
 
-#     for i = 1:n
-#         @inbounds func.mem[1:func.count_states] .= u[i, :]
-#         call(func.code, func.mem, func.params)
-#         @inbounds obs[i, :] .=
-#             func.mem[(func.count_states+2):(func.count_states+func.count_obs+1)]
-#     end
+    for i = 1:n
+        @inbounds func.mem[1:func.count_states] .= u[i, :]
+        call(func.code, func.mem, func.params)
+        @inbounds obs[i, :] .=
+            func.mem[(func.count_states+2):(func.count_states+func.count_obs+1)]
+    end
 
-#     return obs
-# end
+    return obs
+end
 
 function (func::Func{FastFunc})(args...)
     @assert func.count_obs == 1

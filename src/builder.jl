@@ -106,21 +106,27 @@ end
 
 mutable struct Builder
     eqs::Array{Any}
-    vars::Dict{Any,Any}
+    vars::Dict{Any, Any}
     count_states::Int
     count_obs::Int
     count_diffs::Int
     count_params::Int
     count_temps::Int
-    state_idxs::Vector{Int}
-    obs_idxs::Vector{Int}
+    state_idxs::Vector{Any}
+    obs_idxs::Vector{Any}
 end
 
 next_idx(vars) = length(vars)
 
 function add_mem!(vars, v)
-    v = value(v)
-    vars[v] = mem(next_idx(vars))
+    if is_array_of_symbolics(v)
+        for u in scalarize(v)
+            add_mem!(vars, u)
+        end
+    else
+        v = value(v)
+        vars[v] = mem(next_idx(vars))
+    end
 end
 
 function new_var!(vars, name)
@@ -144,10 +150,10 @@ function build(t, states, obs, diffs; params = [])
     eqs = Any[]
     vars = Dict()
 
-    state_idxs = Int[]
+    state_idxs = []
 
     for v in states
-        push!(state_idxs, next_idx(vars)+1)
+        push!(state_idxs, (next_idx(vars)+1, size(v)))
         add_mem!(vars, v)
     end
 
@@ -157,16 +163,26 @@ function build(t, states, obs, diffs; params = [])
         add_mem!(vars, t)
     end
 
-    obs_idxs = Int[]
+    obs_idxs = []
 
     for (i, eq) in enumerate(obs)
-        push!(obs_idxs, next_idx(vars)+1)
         if eq isa Equation
+            push!(obs_idxs, (next_idx(vars)+1, size(eq.lhs)))
             add_mem!(vars, eq.lhs)
             push!(eqs, (eq.lhs, eq.rhs))
         else
-            v = new_var!(vars, "Ψ$(i-1)")
-            push!(eqs, (v, eq))
+            eq = unwrap(scalarize(eq))
+            push!(obs_idxs, (next_idx(vars)+1, size(eq)))
+
+            if size(eq) == ()
+                v = new_var!(vars, "Ψ$(i-1)")
+                push!(eqs, (v, eq))
+            else
+                for (j, q) in enumerate(eq)
+                    v = new_var!(vars, "Ψ$(i-1),$(j-1)")
+                    push!(eqs, (v, q))
+                end
+            end
         end
     end
 
@@ -220,6 +236,8 @@ function propagate(builder::Builder, eq)
             return propagate_unicall(builder, eq)
         elseif head == bincall
             return propagate_bincall(builder, eq)
+        elseif head == getindex
+            return eq
         else
             error("unreachable section")
         end
