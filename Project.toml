@@ -1,6 +1,6 @@
 name = "JitEngine"
 uuid = "c9dac84c-03a7-4281-847c-273c221d165d"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Shahriar Iravanian <siravan@svtsim.com>"]
 
 [deps]

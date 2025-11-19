@@ -3,11 +3,11 @@ module JitEngine
 using SymbolicUtils
 using SymbolicUtils.Rewriters
 using Symbolics
-using Symbolics: value
+using Symbolics: value, scalarize, is_array_of_symbolics
 using ModelingToolkit
 using PrecompileTools: @setup_workload, @compile_workload
 
-export compile_func, compile_ode, compile_jac
+export compile_func, compile_ode, compile_jac, compile_func_vectorized
 
 module Amd
 @static if Sys.ARCH == :x86_64
@@ -63,14 +63,14 @@ include("engine.jl")
     J = zeros(2, 2)
     @compile_workload begin
         f = compile_func([x, y], [x+y, x*y])
-        f([2, 3])
+        f(2, 3)
         f = compile_func([x, y], [x-y, x/y, x%y])
-        f([10, 3])
+        f(10, 3)
         f = compile_func((x, y) -> asin(sin(x)) + exp(log(x+y)) + x^y)
         f(0.5, 2)
-        f = compile_ode(t, [x, y], [β*y, -β*x]; params=[β])
+        f = compile_ode(t, [x, y], [β*y, -β*x]; params = [β])
         f(du, u, [2.0], 0.0)
-        f = compile_jac(t, [x, y], [β*y, -β*x]; params=[β])
+        f = compile_jac(t, [x, y], [β*y, -β*x]; params = [β])
         f(J, u, [2.0], 0.0)
     end
 end

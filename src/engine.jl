@@ -3,6 +3,7 @@ abstract type Lambdify <: FuncType end
 abstract type FastFunc <: FuncType end
 abstract type OdeFunc <: FuncType end
 abstract type JacFunc <: FuncType end
+abstract type Vectorized <: FuncType end
 
 
 mutable struct Func{T}
@@ -14,11 +15,13 @@ mutable struct Func{T}
     count_obs::Int
     count_diffs::Int
     mir::Union{MIR,Nothing}
+    state_views::Vector{Any}
+    obs_views::Vector{Any}
 end
 
 
-function compile_builder(T, builder; keep_ir = :no, peephole = true)
-    # lower builder into an intermediate representation
+function compile_build(T, builder::Builder; keep_ir = :no, peephole = true)
+    # lower build into an intermediate representation
     mir = lower(builder)
     saved_mir = nothing
 
@@ -45,6 +48,9 @@ function compile_builder(T, builder; keep_ir = :no, peephole = true)
     params = zeros(builder.count_params)
     code = create_executable_memory(asm)
 
+    state_views = create_views(mem, builder.state_idxs)
+    obs_views = create_views(mem, builder.obs_idxs)
+
     func = Func{T}(
         code,
         mem,
@@ -54,9 +60,21 @@ function compile_builder(T, builder; keep_ir = :no, peephole = true)
         builder.count_obs,
         builder.count_diffs,
         saved_mir,
+        state_views,
+        obs_views
     )
 
     return func
+end
+
+function create_views(mem, idxs)
+    views = []
+
+    for idx in idxs
+        push!(views, @view mem[idx])
+    end
+
+    return views
 end
 
 ###################### compile_* functions ###############################
@@ -89,16 +107,16 @@ end
 
 function compile_sys(sys; kw...)
     iv, states, obs, diffs, params = symbolize_sys(sys)
-    builder = Builder(iv, states, obs, diffs; params, kw...)
-    return compile_builder(OdeFunc, builder; kw...)
+    builder = build(iv, states, obs, diffs; params, kw...)
+    return compile_build(OdeFunc, builder; kw...)
 end
 
 compile_ode(sys::ODESystem; kw...) = compile_sys(sys; kw...)
 compile_ode(sys::System; kw...) = compile_sys(sys; kw...)
 
 function compile_ode(t, states, diffs; params = [], kw...)
-    builder = Builder(t, states, [], diffs; params)
-    return compile_builder(OdeFunc, builder; kw...)
+    builder = build(t, states, [], diffs; params)
+    return compile_build(OdeFunc, builder; kw...)
 end
 
 function symbolize_ode_func(f::Function, t)
@@ -134,8 +152,8 @@ function compile_jac(t, states, diffs; params = [], kw...)
         end
     end
 
-    builder = Builder(t, states, J, []; params)
-    return compile_builder(JacFunc, builder; kw...)
+    builder = build(t, states, J, []; params)
+    return compile_build(JacFunc, builder; kw...)
 end
 
 function compile_jac(f::Function; kw...)
@@ -154,53 +172,86 @@ end
 
 function compile_func(f::Function; kw...)
     states, obs = symbolize_func(f)
-    builder = Builder(nothing, states, [obs], [])
-    return compile_builder(FastFunc, builder; kw...)
+    builder = build(nothing, states, [obs], [])
+    return compile_build(FastFunc, builder; kw...)
 end
 
 function compile_func(states, obs; params = [], kw...)
-    builder = Builder(nothing, states, obs, []; params)
-    return compile_builder(Lambdify, builder; kw...)
+    builder = build(nothing, states, obs, []; params)
+    return compile_build(Lambdify, builder; kw...)
+end
+
+function compile_func_vectorized(states, obs; params = [], kw...)
+    builder = build(nothing, states, obs, []; params)
+    return compile_build(Vectorized, builder; kw...)
 end
 
 ######################### Calls #############################
 
-function (func::Func{Lambdify})(u::Vector{T}) where {T<:Number}
-    func.mem[1:func.count_states] .= u
+function (func::Func{Lambdify})(args...)
+    if length(args) > func.count_states
+        func.params .= args[(func.count_states+1):end]
+    end
+
+    func.mem[1:func.count_states] .= args[1:func.count_states]
     call(func.code, func.mem, func.params)
     return func.mem[(func.count_states+2):(func.count_states+func.count_obs+1)]
 end
 
-function (func::Func{Lambdify})(u::Vector{T}, p) where {T<:Number}
-    func.params .= p
-    func.mem[1:func.count_states] .= u
+function (func::Func{Vectorized})(args...)
+    for (v, val) in zip(func.state_views, args)
+        if length(v) == 1
+            v[1] = val
+        else
+            v .= val
+        end
+    end
+
     call(func.code, func.mem, func.params)
-    return func.mem[(func.count_states+2):(func.count_states+func.count_obs+1)]
-end
 
-function (func::Func{Lambdify})(
-    u::Matrix{T},
-    p = nothing;
-    copy_matrix = true,
-) where {T<:Number}
-    if p != nothing
-        func.params .= p
+    res = []
+
+    for v in func.obs_views
+        if length(v) == 1
+            push!(res, v[1])
+        else
+            push!(res, copy(v))
+        end
     end
 
-    @assert size(u, 2) == func.count_states
-
-    n = size(u, 1)
-    obs = zeros(n, func.count_obs)
-
-    for i = 1:n
-        @inbounds func.mem[1:func.count_states] .= u[i, :]
-        call(func.code, func.mem, func.params)
-        @inbounds obs[i, :] .=
-            func.mem[(func.count_states+2):(func.count_states+func.count_obs+1)]
-    end
-
-    return obs
+    return res
 end
+
+# function (func::Func{Lambdify})(args...; p) where {T<:Number}
+#     func.params .= p
+#     func.mem[1:func.count_states] .= args
+#     call(func.code, func.mem, func.params)
+#     return func.mem[(func.count_states+2):(func.count_states+func.count_obs+1)]
+# end
+
+# function (func::Func{Lambdify})(
+#     u::Matrix{T},
+#     p = nothing;
+#     copy_matrix = true,
+# ) where {T<:Number}
+#     if p != nothing
+#         func.params .= p
+#     end
+
+#     @assert size(u, 2) == func.count_states
+
+#     n = size(u, 1)
+#     obs = zeros(n, func.count_obs)
+
+#     for i = 1:n
+#         @inbounds func.mem[1:func.count_states] .= u[i, :]
+#         call(func.code, func.mem, func.params)
+#         @inbounds obs[i, :] .=
+#             func.mem[(func.count_states+2):(func.count_states+func.count_obs+1)]
+#     end
+
+#     return obs
+# end
 
 function (func::Func{FastFunc})(args...)
     @assert func.count_obs == 1

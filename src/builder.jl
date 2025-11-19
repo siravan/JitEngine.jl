@@ -37,7 +37,7 @@ apply_rename(eq) = Postwalk(PassThrough(Chain(rules_rename)))(value(eq))
 @syms neg(x) square(x) cube(x) sqrt(x) cbrt(x) not(x)
 
 function approximately(val::Number)
-   return x -> value(x) isa Real ? value(x) ≈ val : false
+    return x -> value(x) isa Real ? value(x) ≈ val : false
 end
 
 rules_rewrite = [
@@ -112,11 +112,15 @@ mutable struct Builder
     count_diffs::Int
     count_params::Int
     count_temps::Int
+    state_idxs::Vector{Int}
+    obs_idxs::Vector{Int}
 end
+
+next_idx(vars) = length(vars)
 
 function add_mem!(vars, v)
     v = value(v)
-    vars[v] = mem(length(vars))
+    vars[v] = mem(next_idx(vars))
 end
 
 function new_var!(vars, name)
@@ -136,11 +140,14 @@ end
 #       a single state variable. It can be empty.
 #   params: (optional)
 #
-function Builder(t, states, obs, diffs; params = [])
+function build(t, states, obs, diffs; params = [])
     eqs = Any[]
     vars = Dict()
 
+    state_idxs = Int[]
+
     for v in states
+        push!(state_idxs, next_idx(vars)+1)
         add_mem!(vars, v)
     end
 
@@ -150,7 +157,10 @@ function Builder(t, states, obs, diffs; params = [])
         add_mem!(vars, t)
     end
 
+    obs_idxs = Int[]
+
     for (i, eq) in enumerate(obs)
+        push!(obs_idxs, next_idx(vars)+1)
         if eq isa Equation
             add_mem!(vars, eq.lhs)
             push!(eqs, (eq.lhs, eq.rhs))
@@ -171,18 +181,22 @@ function Builder(t, states, obs, diffs; params = [])
         vars[v] = param(i - 1)
     end
 
-    builder =
-        Builder([], vars, length(states), length(obs), length(diffs), length(params), 0)
+    builder = Builder(
+        [],
+        vars,
+        length(states),
+        length(obs),
+        length(diffs),
+        length(params),
+        0,
+        state_idxs,
+        obs_idxs,
+    )
 
     for (lhs, eq) in eqs
         rhs = apply_codify(apply_rewrite(apply_rename(eq)))
         push!(builder.eqs, lhs ~ propagate(builder, rhs))
     end
-
-    # logical registers' storage and spill area
-    # for i = 1:SPILL_AREA
-    #     new_temp(builder)
-    # end
 
     return builder
 end
