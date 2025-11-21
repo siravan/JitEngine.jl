@@ -101,40 +101,20 @@ end
 
 ############################ Builder #############################
 
-@syms mem(x::Int) stack(x::Int) param(x::Int) reg(r::Int)
-@syms load(r, loc) save(loc, r) load_const(r, val::Float64, idx::Int)
+@syms reg(r::Int) load(r, loc) save(loc, r) load_const(r, val::Float64, idx::Int)
 
 mutable struct Builder
     eqs::Array{Any}
-    vars::Dict{Any, Any}
+    syms::SymbolTable
     count_states::Int
     count_obs::Int
     count_diffs::Int
     count_params::Int
-    count_temps::Int
     state_idxs::Vector{Any}
     obs_idxs::Vector{Any}
 end
 
-next_idx(vars) = length(vars)
-
-function add_mem!(vars, v)
-    if is_array_of_symbolics(v)
-        for u in scalarize(v)
-            add_mem!(vars, u)
-        end
-    else
-        v = value(v)
-        vars[v] = mem(next_idx(vars))
-    end
-end
-
-function new_var!(vars, name)
-    sym = Symbol(name)
-    v = (@variables $sym)[1]
-    add_mem!(vars, v)
-    return v
-end
+new_temp!(builder::Builder) = new_temp!(builder.syms)
 
 # Builder is a constructor and the main entry point to the JIT compiler.
 #
@@ -148,38 +128,38 @@ end
 #
 function build(t, states, obs, diffs; params = [])
     eqs = Any[]
-    vars = Dict()
+    syms = SymbolTable()
 
     state_idxs = []
 
     for v in states
-        push!(state_idxs, (next_idx(vars)+1, size(v)))
-        add_mem!(vars, v)
+        push!(state_idxs, (next_mem(syms)+1, size(v)))
+        add_mem!(syms, v)
     end
 
     if t == nothing
-        new_var!(vars, "Ψ_")
+        add_mem!(syms, "Ψ_")
     else
-        add_mem!(vars, t)
+        add_mem!(syms, t)
     end
 
     obs_idxs = []
 
     for (i, eq) in enumerate(obs)
         if eq isa Equation
-            push!(obs_idxs, (next_idx(vars)+1, size(eq.lhs)))
-            add_mem!(vars, eq.lhs)
+            push!(obs_idxs, (next_mem(syms)+1, size(eq.lhs)))
+            add_mem!(syms, eq.lhs)
             push!(eqs, (eq.lhs, eq.rhs))
         else
             eq = unwrap(scalarize(eq))
-            push!(obs_idxs, (next_idx(vars)+1, size(eq)))
+            push!(obs_idxs, (next_mem(syms)+1, size(eq)))
 
             if size(eq) == ()
-                v = new_var!(vars, "Ψ$(i-1)")
+                v = add_mem!(syms, "Ψ$(i-1)")
                 push!(eqs, (v, eq))
             else
                 for (j, q) in enumerate(eq)
-                    v = new_var!(vars, "Ψ$(i-1),$(j-1)")
+                    v = add_mem!(syms, "Ψ$(i-1),$(j-1)")
                     push!(eqs, (v, q))
                 end
             end
@@ -189,22 +169,21 @@ function build(t, states, obs, diffs; params = [])
     @assert isempty(diffs) || length(diffs) == length(states)
 
     for (i, eq) in enumerate(diffs)
-        v = new_var!(vars, "δ$(i-1)")
+        v = add_mem!(syms, "δ$(i-1)")
         push!(eqs, (v, eq))
     end
 
-    for (i, v) in enumerate(params)
-        vars[v] = param(i - 1)
+    for v in params
+        add_param!(syms, v)
     end
 
     builder = Builder(
         [],
-        vars,
+        syms,
         length(states),
         length(obs),
         length(diffs),
         length(params),
-        0,
         state_idxs,
         obs_idxs,
     )
@@ -267,7 +246,7 @@ function propagate_binop(builder::Builder, eq)
         # temporary variable here to ensure register
         # allocation algorithm does not run out of registers.
         # This is part of the Sethi–Ullman algorithm.
-        t = new_temp(builder)
+        t = new_temp!(builder)
         push!(builder.eqs, t ~ u)
         return t
     end
@@ -285,7 +264,7 @@ function propagate_ternary(builder::Builder, eq)
         return u
     else
         # see comment in propagate_unicall
-        t = new_temp(builder)
+        t = new_temp!(builder)
         push!(builder.eqs, t ~ u)
         return t
     end
@@ -297,7 +276,7 @@ end
 function propagate_unicall(builder::Builder, eq)
     op, x = arguments(eq)
     x = propagate(builder, x)
-    t = new_temp(builder)
+    t = new_temp!(builder)
     push!(builder.eqs, t ~ unicall(op, x))
     return t
 end
@@ -306,7 +285,7 @@ function propagate_bincall(builder::Builder, eq)
     op, x, y = arguments(eq)
     x = propagate(builder, x)
     y = propagate(builder, y)
-    t = new_temp(builder)
+    t = new_temp!(builder)
     push!(builder.eqs, t ~ bincall(op, x, y))
     return t
 end
@@ -330,12 +309,3 @@ function calc_ershov(x1, x2)
 end
 
 calc_ershov(x1, x2, x3) = calc_ershov(calc_ershov(x1, x2), x3)
-
-function new_temp(builder::Builder)
-    n = builder.count_temps
-    sym = Symbol("θ$n")
-    v = (@variables $sym)[1]
-    builder.vars[v] = stack(n)
-    builder.count_temps += 1
-    return v
-end

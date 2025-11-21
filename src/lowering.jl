@@ -232,7 +232,6 @@ rules_extract = [
 
 apply_extract(eq) = Chain(rules_extract)(value(eq))
 
-
 function allocate(mir::MIR)
     # registers 0 and 1 have special meanings and
     # are excluded from the pool
@@ -280,7 +279,8 @@ end
 
 function substitute_registers!(builder::Builder, mir::MIR)
     regs = allocate(mir)
-    subs = merge(regs, builder.vars)
+    subs = Dict(v => y.loc for (v, y) in builder.syms.vars)
+    subs = merge(regs, subs)
 
     for i = 1:length(mir.ir)
         mir.ir[i] = substitute(mir.ir[i], subs)

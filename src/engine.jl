@@ -44,8 +44,8 @@ function compile_build(T, builder::Builder; keep_ir = :no, peephole = true)
 
     # generate machine code
     asm = generate(builder, mir)
-    mem = zeros(length(builder.vars))
-    params = zeros(builder.count_params)
+    mem = zeros(builder.syms.size_mem)
+    params = zeros(builder.syms.size_param)
     code = create_executable_memory(asm)
 
     state_views = create_views(mem, builder.state_idxs)
@@ -71,7 +71,7 @@ function create_views(mem, idxs)
     views = []
 
     for (idx, shape) in idxs
-        if shape == ()
+        if prod(shape) == 1
             push!(views, @view mem[idx])
         else
             v = @view mem[idx:idx+prod(shape)-1]

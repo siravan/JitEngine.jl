@@ -86,9 +86,9 @@ function generate(builder::Builder, mir::MIR)
     saved = list_registers_to_save(builder, mir)
 
     Cpu.reset()
-    Cpu.prologue(builder.count_temps)
+    Cpu.prologue(builder.syms.size_stack)
 
-    for (reg, loc) in saved
+    for (loc, reg) in saved
         apply_gen(save(loc, reg))
     end
 
@@ -96,11 +96,11 @@ function generate(builder::Builder, mir::MIR)
         apply_gen(t)
     end
 
-    for (reg, loc) in saved
+    for (loc, reg) in saved
         apply_gen(load(reg, loc))
     end
 
-    Cpu.epilogue(builder.count_temps)
+    Cpu.epilogue(builder.syms.size_stack)
 
     Cpu.align()
 
@@ -121,9 +121,10 @@ function list_registers_to_save(builder::Builder, mir::MIR)
     saved = []
 
     for i = CLOBBERED_REGS:LOGICAL_REGS
-        if i in mir.used_regs
-            push!(saved, (i, stack(builder.count_temps)))
-            builder.count_temps += 1
+        if reg in mir.used_regs
+            t = new_temp!(builder)
+            loc = builder.syms.vars[t].loc
+            push!(saved, (loc, reg))
         end
     end
 

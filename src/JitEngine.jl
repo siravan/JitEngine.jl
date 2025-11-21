@@ -47,6 +47,7 @@ end
 const LOGICAL_REGS = 16
 
 include("mathlib.jl")
+include("symtable.jl")
 include("builder.jl")
 include("lowering.jl")
 include("peephole.jl")
