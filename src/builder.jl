@@ -104,17 +104,20 @@ end
 @syms reg(r::Int) load(r, loc) save(loc, r) load_const(r, val::Float64, idx::Int)
 
 mutable struct Builder
+    states::Array{Any}
+    obs_vars::Array{Any}
     eqs::Array{Any}
     syms::SymbolTable
     count_states::Int
     count_obs::Int
     count_diffs::Int
     count_params::Int
-    state_idxs::Vector{Any}
-    obs_idxs::Vector{Any}
 end
 
 new_temp!(builder::Builder) = new_temp!(builder.syms)
+state_name(i) = "σ$(i-1)"
+obs_name(i) = "Ψ$(i-1)"
+diff_name(i) = "δ$(i-1)"
 
 # Builder is a constructor and the main entry point to the JIT compiler.
 #
@@ -130,11 +133,16 @@ function build(t, states, obs, diffs; params = [])
     eqs = Any[]
     syms = SymbolTable()
 
-    state_idxs = []
+    for (i, state) in enumerate(states)
+        if is_array_of_symbolics(state)
+            add_alias!(syms, state, size(state))
 
-    for v in states
-        push!(state_idxs, (next_mem(syms)+1, size(v)))
-        add_mem!(syms, v)
+            for v in scalarize(state)
+                add_mem!(syms, v)
+            end
+        else
+            add_mem!(syms, state)
+        end
     end
 
     if t == nothing
@@ -143,25 +151,28 @@ function build(t, states, obs, diffs; params = [])
         add_mem!(syms, t)
     end
 
-    obs_idxs = []
+    obs_vars = []
 
     for (i, eq) in enumerate(obs)
         if eq isa Equation
-            push!(obs_idxs, (next_mem(syms)+1, size(eq.lhs)))
+            push!(obs_vars, eq.lhs)
             add_mem!(syms, eq.lhs)
             push!(eqs, (eq.lhs, eq.rhs))
         else
-            eq = unwrap(scalarize(eq))
-            push!(obs_idxs, (next_mem(syms)+1, size(eq)))
+            eq = scalarize(eq)
 
-            if size(eq) == ()
-                v = add_mem!(syms, "Ψ$(i-1)")
-                push!(eqs, (v, eq))
-            else
-                for (j, q) in enumerate(eq)
-                    v = add_mem!(syms, "Ψ$(i-1),$(j-1)")
+            if eq isa AbstractArray
+                v = add_alias!(syms, obs_name(i), size(eq))
+                push!(obs_vars, v)
+
+                for (j, q) in enumerate(scalarize(eq))
+                    v = add_mem!(syms, "$(obs_name(i)),$(j-1)")
                     push!(eqs, (v, q))
                 end
+            else
+                v = add_mem!(syms, obs_name(i))
+                push!(obs_vars, v)
+                push!(eqs, (v, eq))
             end
         end
     end
@@ -169,7 +180,7 @@ function build(t, states, obs, diffs; params = [])
     @assert isempty(diffs) || length(diffs) == length(states)
 
     for (i, eq) in enumerate(diffs)
-        v = add_mem!(syms, "δ$(i-1)")
+        v = add_mem!(syms, diff_nbame(i))
         push!(eqs, (v, eq))
     end
 
@@ -178,14 +189,14 @@ function build(t, states, obs, diffs; params = [])
     end
 
     builder = Builder(
+        states,
+        obs_vars,
         [],
         syms,
         length(states),
         length(obs),
         length(diffs),
         length(params),
-        state_idxs,
-        obs_idxs,
     )
 
     for (lhs, eq) in eqs

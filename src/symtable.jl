@@ -2,7 +2,7 @@
 
 struct Variable
     loc
-    shape::Tuple{Int}
+    shape
 end
 
 mutable struct SymbolTable
@@ -16,38 +16,59 @@ end
 
 next_mem(syms::SymbolTable) = syms.size_mem
 
-function add_mem!(syms::SymbolTable, name::String)
+function add_mem!(syms::SymbolTable, name::String, shape=())
     sym = Symbol(name)
     v = (@variables $sym)[1]
     return add_mem!(syms, v)
 end
 
-function add_mem!(syms::SymbolTable, v)
-    if is_array_of_symbolics(v)
-        syms.vars[v] = Variable(mem(syms.size_mem), size(v))
-        for u in scalarize(v)
-            add_mem!(syms, u)
-        end
-    else
-        v = value(v)
-        syms.vars[v] = Variable(mem(syms.size_mem), (1,))
-        syms.size_mem += 1
-    end
-    return v
-end
-
-function add_param!(syms::SymbolTable, v)
+function add_mem!(syms::SymbolTable, v, shape=())
     v = value(v)
-    syms.vars[v] = Variable(param(syms.size_param), (1,))
-    syms.size_param += 1
+    syms.vars[v] = Variable(mem(syms.size_mem), shape)
+    syms.size_mem += prod(shape)
     return v
 end
 
-function new_temp!(syms::SymbolTable)
+function add_alias!(syms::SymbolTable, name::String, shape=())
+    sym = Symbol(name)
+    v = (@variables $sym)[1]
+    return add_alias!(syms, v, shape)
+end
+
+function add_alias!(syms::SymbolTable, v, shape=())
+    v = value(v)
+    syms.vars[v] = Variable(mem(syms.size_mem), shape)
+    return v
+end
+
+function add_param!(syms::SymbolTable, v, shape=())
+    v = value(v)
+    syms.vars[v] = Variable(param(syms.size_param), shape)
+    syms.size_param += prod(shape)
+    return v
+end
+
+function new_temp!(syms::SymbolTable, shape=())
     n = syms.size_stack
     sym = Symbol("θ$n")
     v = (@variables $sym)[1]
-    syms.vars[v] = Variable(stack(n), (1,))
-    syms.size_stack += 1
+    syms.vars[v] = Variable(stack(n), shape)
+    syms.size_stack += prod(shape)
     return v
+end
+
+idx_rules = [
+    @rule mem(~idx) => ~idx
+    @rule stack(~idx) => ~idx
+    @rule param(~idx) => ~idx
+]
+
+function extract_idx(v::Variable)
+    for r in idx_rules
+        idx = r(v.loc)
+        if idx != nothing
+            return idx
+        end
+    end
+    nothing
 end

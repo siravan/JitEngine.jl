@@ -48,8 +48,8 @@ function compile_build(T, builder::Builder; keep_ir = :no, peephole = true)
     params = zeros(builder.syms.size_param)
     code = create_executable_memory(asm)
 
-    state_views = create_views(mem, builder.state_idxs)
-    obs_views = create_views(mem, builder.obs_idxs)
+    state_views = create_views(builder, mem, builder.states)
+    obs_views = create_views(builder, mem, builder.obs_vars)
 
     func = Func{T}(
         code,
@@ -67,10 +67,14 @@ function compile_build(T, builder::Builder; keep_ir = :no, peephole = true)
     return func
 end
 
-function create_views(mem, idxs)
+function create_views(builder::Builder, mem, vars)
     views = []
 
-    for (idx, shape) in idxs
+    for v in vars
+        var_info = builder.syms.vars[v]
+        shape = var_info.shape
+        idx = extract_idx(var_info) + 1
+
         if prod(shape) == 1
             push!(views, @view mem[idx])
         else
