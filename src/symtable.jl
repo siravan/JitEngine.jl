@@ -1,5 +1,3 @@
-@syms mem(x::Int) stack(x::Int) param(x::Int)
-
 struct Variable
     loc
     shape
@@ -16,10 +14,27 @@ end
 
 next_mem(syms::SymbolTable) = syms.size_mem
 
-function add_mem!(syms::SymbolTable, name::String, shape=())
+function create_variable(name, shape)
     sym = Symbol(name)
-    v = (@variables $sym)[1]
-    return add_mem!(syms, v)
+    l = length(shape)
+
+    if l == 0
+        v = (@variables $sym)[1]
+    elseif l == 1
+        v = (@variables $sym[1:shape[1]])[1]
+    elseif l == 2
+        v = (@variables $sym[1:shape[1],1:shape[2]])[1]
+    elseif l == 3
+        v = (@variables $sym[1:shape[1],1:shape[2],1:shape[3]])[1]
+    else
+        error("only 1-3 dimensional variables are supported")
+    end
+
+    return v
+end
+
+function add_mem!(syms::SymbolTable, name::String, shape=())
+    return add_mem!(syms, create_variable(name, shape))
 end
 
 function add_mem!(syms::SymbolTable, v, shape=())
@@ -30,9 +45,7 @@ function add_mem!(syms::SymbolTable, v, shape=())
 end
 
 function add_alias!(syms::SymbolTable, name::String, shape=())
-    sym = Symbol(name)
-    v = (@variables $sym)[1]
-    return add_alias!(syms, v, shape)
+    return add_alias!(syms, create_variable(name, shape), shape)
 end
 
 function add_alias!(syms::SymbolTable, v, shape=())
@@ -50,8 +63,7 @@ end
 
 function new_temp!(syms::SymbolTable, shape=())
     n = syms.size_stack
-    sym = Symbol("θ$n")
-    v = (@variables $sym)[1]
+    v = create_variable("θ$n", shape)
     syms.vars[v] = Variable(stack(n), shape)
     syms.size_stack += prod(shape)
     return v

@@ -46,6 +46,7 @@ end
 
 const LOGICAL_REGS = 16
 
+include("mir.jl")
 include("mathlib.jl")
 include("symtable.jl")
 include("builder.jl")
