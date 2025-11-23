@@ -44,8 +44,16 @@ function lower(builder::Builder)
     mir = MIR()
 
     for eq in builder.eqs
-        r = lower_real(mir, eq.rhs)
-        push!(mir, save(eq.lhs, r))
+        if eq isa Equation
+            if istree(eq.lhs) && operation(eq.lhs) == getindex
+                lower_setindex(mir, eq.lhs, lower_real(mir, eq.rhs))
+            else
+                r = lower_real(mir, eq.rhs)
+                push!(mir, save(eq.lhs, r))
+            end
+        else
+            push!(mir, eq)
+        end
     end
 
     return mir
@@ -78,7 +86,7 @@ function lower(mir::MIR, eq)
         elseif head == bincall
             return lower_bincall(mir, eq)
         elseif head == getindex
-            return lower_terminal(mir, eq)
+            return lower_getindex(mir, eq)
         end
     else
         return lower_terminal(mir, eq)
@@ -98,6 +106,26 @@ function lower_terminal(mir::MIR, eq)
         return push_new_reg!(mir, r -> load_const(r, val, idx)), Real
     else
         return push_new_reg!(mir, r -> load(r, eq)), Real
+    end
+end
+
+function lower_getindex(mir::MIR, eq)
+    arr, idx = arguments(eq)
+
+    if isequal(idx, λ)
+        return push_new_reg!(mir, r -> load_indexed(r, arr)), Real
+    else
+        return push_new_reg!(mir, r -> load(r, eq)), Real
+    end
+end
+
+function lower_setindex(mir::MIR, lhs, rhs)
+    arr, idx = arguments(lhs)
+
+    if isequal(idx, λ)
+        return push!(mir, save_indexed(arr, rhs))
+    else
+        error("general indexing not supported")
     end
 end
 

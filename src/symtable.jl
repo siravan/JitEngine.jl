@@ -84,3 +84,7 @@ function extract_idx(v::Variable)
     end
     nothing
 end
+
+function rename(syms::SymbolTable, dst, src)
+    syms.vars[dst] = syms.vars[src]
+end

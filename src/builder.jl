@@ -76,7 +76,6 @@ apply_rewrite(eq) = Postwalk(PassThrough(Chain(rules_rewrite)))(value(eq))
 @syms unicall(op::Symbol, x::Any) bincall(op::Symbol, x::Any, y::Any) powi(p::Int)::Symbol
 @syms unicast(op::Symbol, x::Any) bincast(op::Symbol, x::Any, y::Any)
 @syms reducer(f::Any, op::Symbol, x::Any)
-@syms loop(lhs::Any, rhs::Any)
 
 @syms arrayop(output_idx::Any, expr::Any, reduce::Any, shape::Any)
 
@@ -160,6 +159,7 @@ mutable struct Builder
     count_obs::Int
     count_diffs::Int
     count_params::Int
+    count_loops::Int
 end
 
 new_temp!(builder::Builder, shape=()) = new_temp!(builder.syms, shape)
@@ -250,6 +250,7 @@ function build(t, states, obs, diffs; params = [], vectorize=false)
         length(obs),
         length(diffs),
         length(params),
+        0
     )
 
     for (lhs, eq) in eqs
@@ -258,7 +259,7 @@ function build(t, states, obs, diffs; params = [], vectorize=false)
         if size(lhs) == ()
             push!(builder.eqs, lhs ~ propagate(builder, rhs))
         else
-            push!(builder.eqs, loop(lhs, propagate(builder, rhs)))
+            rename(builder.syms, lhs, propagate(builder, rhs))
         end
     end
 
@@ -371,21 +372,84 @@ function propagate_bincall(builder::Builder, eq)
     return t
 end
 
+# function propagate_unicast(builder::Builder, eq)
+#     op, x = arguments(eq)
+#     x = propagate(builder, x)
+#     t = new_temp!(builder, size(x))
+#     push!(builder.eqs, loop(t, unicast(op, x)))
+#     return t
+# end
+
 function propagate_unicast(builder::Builder, eq)
+    label = ".L$(builder.count_loops)"
+    builder.count_loops += 1
+
     op, x = arguments(eq)
-    x = propagate(builder, x)
-    t = new_temp!(builder, size(x))
-    push!(builder.eqs, loop(t, unicast(op, x)))
-    return t
+    arr_x = propagate(builder, x)
+
+    push!(builder.eqs, reset_index())
+    push!(builder.eqs, set_label(label))
+
+    expr = eval(:($op($arr_x[λ])))
+    y = propagate(builder, rewrite(expr))
+
+    arr_t = new_temp!(builder, size(arr_x))
+    push!(builder.eqs, arr_t[λ] ~ y)
+
+    push!(builder.eqs, inc_index())
+    push!(builder.eqs, branch_if(prod(size(arr_x)), label))
+    return arr_t
+end
+
+# function propagate_bincast(builder::Builder, eq)
+#     op, x, y = arguments(eq)
+#     x = propagate(builder, unref(x))
+#     y = propagate(builder, unref(y))
+#     t = new_temp!(builder, size(x .+ y))
+#     push!(builder.eqs, loop(t, bincast(op, x, y)))
+#     return t
+# end
+
+function broadcast_size(x1, x2)
+    s1 = size(x1)
+    s2 = size(x2)
+
+    if s1 == ()
+        return s2
+    elseif s2 == ()
+        return s1
+    elseif s1 == s2
+        return s1
+    else
+        error("broadcast error!")
+    end
 end
 
 function propagate_bincast(builder::Builder, eq)
+    label = ".L$(builder.count_loops)"
+    builder.count_loops += 1
+
     op, x, y = arguments(eq)
-    x = propagate(builder, unref(x))
-    y = propagate(builder, unref(y))
-    t = new_temp!(builder, size(x .+ y))
-    push!(builder.eqs, loop(t, bincast(op, x, y)))
-    return t
+
+    arr_x = propagate(builder, unref(x))
+    arr_y = propagate(builder, unref(y))
+
+    push!(builder.eqs, reset_index())
+    push!(builder.eqs, set_label(label))
+
+    tx = size(arr_x) == () ? arr_x : arr_x[λ]
+    ty = size(arr_y) == () ? arr_y : arr_y[λ]
+
+    expr = eval(:($op($tx, $ty)))
+    y = propagate(builder, rewrite(expr))
+    shape = broadcast_size(arr_x, arr_y)
+    arr_t = new_temp!(builder, shape)
+    push!(builder.eqs, arr_t[λ] ~ y)
+
+    push!(builder.eqs, inc_index())
+    push!(builder.eqs, branch_if(prod(shape), label))
+
+    return arr_t
 end
 
 function propagate_arrayop(builder::Builder, eq)
