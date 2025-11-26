@@ -250,12 +250,18 @@ end
 rules_extract = [
     @rule load(~dst, ~x) => (~dst, ω, ω, ω)
     @rule load_const(~dst, ~x, ~idx) => (~dst, ω, ω, ω)
+    @rule load_indexed(~dst, ~x) => (~dst, ω, ω, ω)
     @rule save(~x, ~r1) => (ω, ~r1, ω, ω)
+    @rule save_indexed(~x, ~r1) => (ω, ~r1, ω, ω)
     @rule uniop(~dst, ~op, ~r1) => (~dst, ~r1, ω, ω)
     @rule binop(~dst, ~op, ~r1, ~r2) => (~dst, ~r1, ~r2, ω)
     @rule ternary(~dst, ~r1, ~r2, ~r3) => (~dst, ~r1, ~r2, ~r3)
     @rule call_func(~op) => (σ0, ω, ω, ω)
     @rule mov(~dst, ~r1) => (~dst, ~r1, ω, ω)
+    @rule set_label(~label) => (ω, ω, ω, ω)
+    @rule branch_if(~limit, ~label) => (ω, ω, ω, ω)
+    @rule reset_index() => (ω, ω, ω, ω)
+    @rule inc_index() => (ω, ω, ω, ω)
 ]
 
 apply_extract(eq) = Chain(rules_extract)(value(eq))

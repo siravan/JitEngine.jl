@@ -17,7 +17,7 @@ is_integer(x) = is_number(x) && round(x) == x
 @syms matmul(x::Any, y::Any)
 
 is_matrix(xs) = any(x -> size(x) != (), xs)
-is_not_matrix(xs) = !any(x -> size(x) != (), xs)
+
 
 rules_rename = [
     @rule +(~~xs) => foldl(plus, ~~xs)
@@ -77,7 +77,7 @@ apply_rewrite(eq) = Postwalk(PassThrough(Chain(rules_rewrite)))(value(eq))
 @syms unicast(op::Symbol, x::Any) bincast(op::Symbol, x::Any, y::Any)
 @syms reducer(f::Any, op::Symbol, x::Any)
 
-@syms arrayop(output_idx::Any, expr::Any, reduce::Any, shape::Any)
+# @syms arrayop(output_idx::Any, expr::Any, reduce::Any, shape::Any)
 
 unref(ref::Symbolics.Ref) = ref.x
 unref(ref) = ref
@@ -140,8 +140,7 @@ function rewrite(eq)
     end
 
     if is_arrayop(x)
-        op = unwrap(x)
-        return arrayop(op.output_idx, rewrite(unref(op.expr)), op.reduce, op.shape)
+        error("naked ArrayOp is not supported!")
     else
         return x
     end
@@ -291,8 +290,6 @@ function propagate(builder::Builder, eq)
             return propagate_unicast(builder, eq)
         elseif head == bincast
             return propagate_bincast(builder, eq)
-        elseif head == arrayop
-            return propagate_arrayop(builder, eq)
         elseif head == matmul
             return propagate_matmul(builder, eq)
         elseif head == reducer
@@ -372,14 +369,6 @@ function propagate_bincall(builder::Builder, eq)
     return t
 end
 
-# function propagate_unicast(builder::Builder, eq)
-#     op, x = arguments(eq)
-#     x = propagate(builder, x)
-#     t = new_temp!(builder, size(x))
-#     push!(builder.eqs, loop(t, unicast(op, x)))
-#     return t
-# end
-
 function propagate_unicast(builder::Builder, eq)
     label = ".L$(builder.count_loops)"
     builder.count_loops += 1
@@ -401,15 +390,6 @@ function propagate_unicast(builder::Builder, eq)
     return arr_t
 end
 
-# function propagate_bincast(builder::Builder, eq)
-#     op, x, y = arguments(eq)
-#     x = propagate(builder, unref(x))
-#     y = propagate(builder, unref(y))
-#     t = new_temp!(builder, size(x .+ y))
-#     push!(builder.eqs, loop(t, bincast(op, x, y)))
-#     return t
-# end
-
 function broadcast_size(x1, x2)
     s1 = size(x1)
     s2 = size(x2)
@@ -428,6 +408,7 @@ end
 function propagate_bincast(builder::Builder, eq)
     label = ".L$(builder.count_loops)"
     builder.count_loops += 1
+    shape = broadcast_size(arr_x, arr_y)
 
     op, x, y = arguments(eq)
 
@@ -442,7 +423,6 @@ function propagate_bincast(builder::Builder, eq)
 
     expr = eval(:($op($tx, $ty)))
     y = propagate(builder, rewrite(expr))
-    shape = broadcast_size(arr_x, arr_y)
     arr_t = new_temp!(builder, shape)
     push!(builder.eqs, arr_t[λ] ~ y)
 
@@ -450,14 +430,6 @@ function propagate_bincast(builder::Builder, eq)
     push!(builder.eqs, branch_if(prod(shape), label))
 
     return arr_t
-end
-
-function propagate_arrayop(builder::Builder, eq)
-    output_idx, expr, reduce, shape = arguments(eq)
-    expr = propagate(builder, unref(expr))
-    t = new_temp!(builder, shape)
-    push!(builder.eqs, loop(t, arrayop(output_idx, expr, reduce, shape)))
-    return t
 end
 
 function propagate_matmul(builder::Builder, eq)
@@ -470,10 +442,29 @@ function propagate_matmul(builder::Builder, eq)
 end
 
 function propagate_reduce(builder::Builder, eq)
+    label = ".L$(builder.count_loops)"
+    builder.count_loops += 1
+
     f, op, x = arguments(eq)
-    x = propagate(builder, x)
+    @assert f == identity
+    arr_x = propagate(builder, x)
+    shape = size(arr_x)
+
+    push!(builder.eqs, reset_index())
+
     t = new_temp!(builder, ())
-    push!(builder.eqs, loop(t, reducer(f, op, x)))
+    push!(builder.eqs, t ~ arr_x[λ])
+
+    n = prod(shape)
+    if n > 1
+        push!(builder.eqs, set_label(label))
+        push!(builder.eqs, inc_index())
+        expr = eval(:($op($t, $arr_x[λ])))
+        y = propagate(builder, rewrite(expr))
+        push!(builder.eqs, t ~ y)
+        push!(builder.eqs, branch_if(n-1, label))
+    end
+
     return t
 end
 
