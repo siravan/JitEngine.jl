@@ -4,7 +4,7 @@ struct Variable
 end
 
 mutable struct SymbolTable
-    vars::Dict{Any, Variable}
+    vars::Dict{Any,Variable}
     size_mem::Int
     size_param::Int
     size_stack::Int
@@ -23,9 +23,9 @@ function create_variable(name, shape)
     elseif l == 1
         v = (@variables $sym[1:shape[1]])[1]
     elseif l == 2
-        v = (@variables $sym[1:shape[1],1:shape[2]])[1]
+        v = (@variables $sym[1:shape[1], 1:shape[2]])[1]
     elseif l == 3
-        v = (@variables $sym[1:shape[1],1:shape[2],1:shape[3]])[1]
+        v = (@variables $sym[1:shape[1], 1:shape[2], 1:shape[3]])[1]
     else
         error("only 1-3 dimensional variables are supported")
     end
@@ -34,11 +34,10 @@ function create_variable(name, shape)
 end
 
 function add_mem!(syms::SymbolTable, name::String, shape=())
-    return add_mem!(syms, create_variable(name, shape))
+    return add_mem!(syms, create_variable(name, shape), shape)
 end
 
 function add_mem!(syms::SymbolTable, v, shape=())
-    v = value(v)
     syms.vars[v] = Variable(mem(syms.size_mem), shape)
     syms.size_mem += prod(shape)
     return v
@@ -86,5 +85,5 @@ function extract_idx(v::Variable)
 end
 
 function rename(syms::SymbolTable, dst, src)
-    syms.vars[dst] = syms.vars[src]
+    syms.vars[src] = syms.vars[dst]
 end

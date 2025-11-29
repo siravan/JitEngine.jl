@@ -177,19 +177,19 @@ diff_name(i) = "δ$(i-1)"
 #       a single state variable. It can be empty.
 #   params: (optional)
 #
-function build(t, states, obs, diffs; params = [], vectorize=false)
+function build(t, states, obs, diffs; params = [], unroll=true)
     eqs = Any[]
     syms = SymbolTable()
 
     for (i, state) in enumerate(states)
-        if is_array_of_symbolics(state) && !vectorize
+        if is_array_of_symbolics(state) && unroll
             add_alias!(syms, state, size(state))
 
             for v in scalarize(state)
                 add_mem!(syms, v)
             end
         else
-            add_mem!(syms, state)
+            add_mem!(syms, state, size(state))
         end
     end
 
@@ -206,7 +206,7 @@ function build(t, states, obs, diffs; params = [], vectorize=false)
             push!(obs_vars, eq.lhs)
             add_mem!(syms, eq.lhs)
             push!(eqs, (eq.lhs, eq.rhs))
-        elseif vectorize
+        elseif !unroll
             v = add_mem!(syms, obs_name(i), size(eq))
             push!(obs_vars, v)
             push!(eqs, (v, eq))
@@ -232,7 +232,7 @@ function build(t, states, obs, diffs; params = [], vectorize=false)
     @assert isempty(diffs) || length(diffs) == length(states)
 
     for (i, eq) in enumerate(diffs)
-        v = add_mem!(syms, diff_nbame(i))
+        v = add_mem!(syms, diff_name(i))
         push!(eqs, (v, eq))
     end
 
@@ -408,12 +408,12 @@ end
 function propagate_bincast(builder::Builder, eq)
     label = ".L$(builder.count_loops)"
     builder.count_loops += 1
-    shape = broadcast_size(arr_x, arr_y)
 
     op, x, y = arguments(eq)
 
     arr_x = propagate(builder, unref(x))
     arr_y = propagate(builder, unref(y))
+    shape = broadcast_size(arr_x, arr_y)
 
     push!(builder.eqs, reset_index())
     push!(builder.eqs, set_label(label))

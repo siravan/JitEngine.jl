@@ -1,4 +1,5 @@
 mutable struct MIR
+    syms::SymbolTable
     fp::Dict{Symbol,Any}
     ir::Vector{Any}
     vt::Vector{Any}
@@ -6,7 +7,7 @@ mutable struct MIR
     count_regs::Int
     used_regs::Vector{Int}
 
-    MIR() = new(func_pointers(), [], [], [], 2, Int[])
+    MIR(syms) = new(syms, func_pointers(), [], [], [], 2, Int[])
 end
 
 function Base.push!(mir::MIR, t)
@@ -41,7 +42,7 @@ end
 # an intermediate representation
 
 function lower(builder::Builder)
-    mir = MIR()
+    mir = MIR(builder.syms)
 
     for eq in builder.eqs
         if eq isa Equation
@@ -316,9 +317,12 @@ function substitute_registers!(builder::Builder, mir::MIR)
     subs = Dict(v => y.loc for (v, y) in builder.syms.vars)
     subs = merge(regs, subs)
 
+    ir = []
+
     for i = 1:length(mir.ir)
-        mir.ir[i] = substitute(mir.ir[i], subs)
+        push!(ir, substitute(mir.ir[i], subs))
     end
 
+    mir.ir = ir
     mir.used_regs = unique(values(regs))
 end

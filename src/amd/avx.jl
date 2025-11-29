@@ -5,6 +5,7 @@ function vmovsd_xmm_mem(reg, rm, offset)
 end
 
 function vmovsd_xmm_indexed(reg, base, index, scale)
+    @assert scale in [1, 2, 4, 8]
     vex_sd(reg, 0, base, index)
     append_byte(0x10)
     modrm_sib(reg, base, index, scale)
@@ -25,6 +26,7 @@ function vmovsd_mem_xmm(rm, offset, reg)
 end
 
 function vmovsd_indexed_xmm(base, index, scale, reg)
+    @assert scale in [1, 2, 4, 8]
     vex_sd(reg, 0, base, index)
     append_byte(0x11)
     modrm_sib(reg, base, index, scale)

@@ -20,7 +20,7 @@ mutable struct Func{T}
 end
 
 
-function compile_build(T, builder::Builder; keep_ir = :no, peephole = true)
+function compile_build(T, builder::Builder; keep_ir=:no, peephole=true)
     # lower build into an intermediate representation
     mir = lower(builder)
     saved_mir = nothing
@@ -123,7 +123,7 @@ end
 compile_ode(sys::ODESystem; kw...) = compile_sys(sys; kw...)
 compile_ode(sys::System; kw...) = compile_sys(sys; kw...)
 
-function compile_ode(t, states, diffs; params = [], kw...)
+function compile_ode(t, states, diffs; params=[], kw...)
     builder = build(t, states, [], diffs; params)
     return compile_build(OdeFunc, builder; kw...)
 end
@@ -149,7 +149,7 @@ function compile_ode(f::Function; kw...)
     return compile_ode(t, states, diffs; params, kw...)
 end
 
-function compile_jac(t, states, diffs; params = [], kw...)
+function compile_jac(t, states, diffs; params=[], kw...)
     n = length(states)
     @assert n == length(diffs)
 
@@ -185,18 +185,14 @@ function compile_func(f::Function; kw...)
     return compile_build(FastFunc, builder; kw...)
 end
 
-function compile_func(states, obs; params = [], kw...)
+function compile_func(states, obs; params=[], unroll=true, kw...)
+    builder = build(nothing, states, obs, []; unroll, params)
+
     if any(Symbolics.is_array_of_symbolics, states)
-        return compile_func_vectorized(states, obs; params = [], kw...)
+        return compile_build(Vectorized, builder; kw...)
     else
-        builder = build(nothing, states, obs, []; params)
         return compile_build(Lambdify, builder; kw...)
     end
-end
-
-function compile_func_vectorized(states, obs; params = [], kw...)
-    builder = build(nothing, states, obs, []; params)
-    return compile_build(Vectorized, builder; kw...)
 end
 
 ######################### Calls #############################
@@ -244,8 +240,8 @@ end
 
 function (func::Func{Lambdify})(
     u::Matrix{T},
-    p = nothing;
-    copy_matrix = true,
+    p=nothing;
+    copy_matrix=true,
 ) where {T<:Number}
     if p != nothing
         func.params .= p

@@ -31,6 +31,15 @@ rules_gen_amd = [
     @rule ternary(~dst, ~cond, ~x, ~y) =>
         Amd.select_if(θ(~dst), θ(~cond), θ(~x), θ(~y))
     @rule call_func(~op) => Amd.call_op(~op)
+    #################### Array Ops ####################
+    @rule reset_index() => Amd.reset_index()
+    @rule inc_index() => Amd.inc_index()
+    @rule load_indexed(~dst, mem(~idx)) => Amd.load_mem_indexed(θ(~dst), θ(~idx))
+    @rule load_indexed(~dst, stack(~idx)) => Amd.load_stack_indexed(θ(~dst), θ(~idx))
+    @rule save_indexed(mem(~idx), ~src) => Amd.save_mem_indexed(θ(~src), θ(~idx))
+    @rule save_indexed(stack(~idx), ~src) => Amd.save_stack_indexed(θ(~src), θ(~idx))
+    @rule set_label(~label) => Amd.set_label(~label)
+    @rule branch_if(~limit, ~label) => Amd.branch_if(~limit, ~label)
 ]
 
 rules_gen_arm = [

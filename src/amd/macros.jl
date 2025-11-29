@@ -1,9 +1,10 @@
 const MEM = RBP
-const STATES = R13
-const IDX = R12
+# const STATES = R13
+# const IDX = R12
 const PARAMS = RBX
 const RET = 0
 const TEMP = 1
+const INDEX = R12
 
 const PAGE_SIZE = 4096
 
@@ -39,12 +40,12 @@ end
 
 function abs(dst, s1)
     vmovsd_xmm_label(TEMP, "_minus_zero_")
-    vandnpd(dst, TEMP, s1);
+    vandnpd(dst, TEMP, s1)
 end
 
 function recip(dst, s1)
     vmovsd_xmm_label(TEMP, "_one_")
-    vdivsd(dst, TEMP, s1);
+    vdivsd(dst, TEMP, s1)
 end
 
 function not(dst, s1)
@@ -162,26 +163,22 @@ function save_nonvolatile_regs()
     @static if Sys.iswindows()
         mov_mem_reg(RSP, 0x08, MEM)
         mov_mem_reg(RSP, 0x10, PARAMS)
-        # mov_mem_reg(RSP, 0x18, IDX)
-        # mov_mem_reg(RSP, 0x20, STATES)
+        mov_mem_reg(RSP, 0x18, INDEX)
     else
         sub_rsp(32)
         mov_mem_reg(RSP, 0x00, MEM)
         mov_mem_reg(RSP, 0x08, PARAMS)
-        # mov_mem_reg(RSP, 0x10, IDX)
-        # mov_mem_reg(RSP, 0x18, STATES)
+        mov_mem_reg(RSP, 0x10, INDEX)
     end
 end
 
 function load_nonvolatile_regs()
     @static if Sys.iswindows()
-        # mov_reg_mem(STATES, RSP, 0x20)
-        # mov_reg_mem(IDX, RSP, 0x18)
+        mov_reg_mem(INDEX, RSP, 0x18)
         mov_reg_mem(PARAMS, RSP, 0x10)
         mov_reg_mem(MEM, RSP, 0x08)
     else
-        # mov_reg_mem(STATES, RSP, 0x18);
-        # mov_reg_mem(IDX, RSP, 0x10);
+        mov_reg_mem(INDEX, RSP, 0x10)
         mov_reg_mem(PARAMS, RSP, 0x08)
         mov_reg_mem(MEM, RSP, 0x00)
         add_rsp(32)
@@ -240,13 +237,9 @@ function prologue(cap)
 
     @static if Sys.iswindows()
         mov(MEM, RCX)
-        # mov(STATES, RDX)
-        # mov(IDX, R8)
         mov(PARAMS, R9)
     else
         mov(MEM, RDI)
-        # mov(STATES, RSI)
-        # mov(IDX, RDX)
         mov(PARAMS, RCX)
     end
 
@@ -258,4 +251,43 @@ function epilogue(cap)
     vzeroupper()
     load_nonvolatile_regs()
     ret()
+end
+
+###################### Array Ops ###########################
+
+function load_mem_indexed(dst, idx)
+    mov(RAX, INDEX)
+    add_imm(RAX, idx)
+    vmovsd_xmm_indexed(dst, MEM, RAX, 8)
+end
+
+function save_mem_indexed(src, idx)
+    mov(RAX, INDEX)
+    add_imm(RAX, idx)
+    vmovsd_indexed_xmm(MEM, RAX, 8, src)
+end
+
+function load_stack_indexed(dst, idx)
+    mov(RAX, INDEX)
+    add_imm(RAX, idx)
+    vmovsd_xmm_indexed(dst, RSP, RAX, 8)
+end
+
+function save_stack_indexed(src, idx)
+    mov(RAX, INDEX)
+    add_imm(RAX, idx)
+    vmovsd_indexed_xmm(RSP, RAX, 8, src)
+end
+
+function reset_index()
+    xor_(INDEX, INDEX)
+end
+
+function inc_index()
+    inc(INDEX)
+end
+
+function branch_if(limit, label)
+    cmp_imm(INDEX, limit)
+    jl(label)
 end

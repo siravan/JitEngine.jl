@@ -27,9 +27,16 @@ function modrm_reg(reg, rm)
 end
 
 function modrm_sib(reg, base, index, scale)
-    append_byte(0x04 + ((reg & 7) << 3)) # R/M = 0b100, MOD = 0b00
-    scale = trailing_zeros(scale) << 6
-    append_byte((scale | (index & 7) << 3) | (base & 7))
+    if base == RBP
+        append_byte(0x44 + ((reg & 7) << 3)) # R/M = 0b100, MOD = 0b00
+        scale = trailing_zeros(scale) << 6
+        append_byte((scale | (index & 7) << 3) | (base & 7))
+        append_byte(0)
+    else
+        append_byte(0x04 + ((reg & 7) << 3)) # R/M = 0b100, MOD = 0b00
+        scale = trailing_zeros(scale) << 6
+        append_byte((scale | (index & 7) << 3) | (base & 7))
+    end
 end
 
 function rex(reg, rm)
@@ -283,6 +290,19 @@ function add_imm(rm, imm)
     append_word(imm)
 end
 
+function cmp(reg, rm)
+    rex(reg, rm)
+    append_byte(0x3b)
+    modrm_reg(reg, rm)
+end
+
+function cmp_imm(rm, imm)
+    rex(0, rm)
+    append_byte(0x81)
+    modrm_reg(7, rm)    # note that the cmp opcode is coded in the R/MMod byte
+    append_word(imm)
+end
+
 function inc(rm)
     rex(0, rm)
     append_byte(0xff)
@@ -307,6 +327,12 @@ end
 
 function jnz(label)
     append_bytes([0x0f, 0x85])
+    jump(label, 0)
+end
+
+# jump less
+function jl(label)
+    append_bytes([0x0f, 0x8c])
     jump(label, 0)
 end
 
