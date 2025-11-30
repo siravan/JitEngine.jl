@@ -312,6 +312,10 @@ function matmul(dst, x, y, shape)
 
         mov_imm(RAX, n)
         push(RAX)
+
+        call_op(:matmul)
+
+        add_rsp(32)
     else
         mov_imm(RAX, dst)
         lea_indexed(RDI, MEM, RAX, 8)
@@ -325,9 +329,9 @@ function matmul(dst, x, y, shape)
         mov_imm(RCX, m)
         mov_imm(R8, n)
         mov_imm(R9, l)
-    end
 
-    call_op(:matmul)
+        call_op(:matmul)
+    end
 
     return shape
 end
