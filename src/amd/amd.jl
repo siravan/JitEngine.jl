@@ -195,6 +195,13 @@ function mov(reg, rm)
     modrm_reg(reg, rm)
 end
 
+function mov_imm(rm, imm32)
+    rex(0, rm)
+    append_byte(0xc7)
+    modrm_reg(0, rm)
+    append_word(imm32)
+end
+
 function mov_reg_mem(reg, rm, offset)
     rex(reg, rm)
     append_byte(0x8b)
@@ -213,6 +220,13 @@ function mov_mem_reg(rm, offset, reg)
     rex(reg, rm)
     append_byte(0x89)
     modrm_mem(reg, rm, offset)
+end
+
+function lea_indexed(reg, base, index, scale)
+    @assert scale in [1, 2, 4, 8]
+    rex(reg, 0)
+    append_byte(0x8d)
+    modrm_sib(reg, base, index, scale)
 end
 
 function movabs(rm, imm64)

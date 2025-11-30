@@ -51,6 +51,7 @@ include("mathlib.jl")
 include("symtable.jl")
 include("builder.jl")
 include("lowering.jl")
+include("allocation.jl")
 include("peephole.jl")
 include("codegen.jl")
 

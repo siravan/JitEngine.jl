@@ -291,3 +291,71 @@ function branch_if(limit, label)
     cmp_imm(INDEX, limit)
     jl(label)
 end
+
+function matmul(dst, x, y, shape)
+    m, n, l = shape
+
+    @static if Sys.iswindows()
+        mov_imm(RAX, dst)
+        lea_indexed(RCX, MEM, RAX, 8)
+
+        mov_imm(RAX, x)
+        lea_indexed(RDX, MEM, RAX, 8)
+
+        mov_imm(RAX, y)
+        lea_indexed(R8, MEM, RAX, 8)
+
+        mov_imm(R9, m)
+
+        mov_imm(RAX, l)
+        push(RAX)
+
+        mov_imm(RAX, n)
+        push(RAX)
+    else
+        mov_imm(RAX, dst)
+        lea_indexed(RDI, MEM, RAX, 8)
+
+        mov_imm(RAX, x)
+        lea_indexed(RSI, MEM, RAX, 8)
+
+        mov_imm(RAX, y)
+        lea_indexed(RDX, MEM, RAX, 8)
+
+        mov_imm(RCX, m)
+        mov_imm(R8, n)
+        mov_imm(R9, l)
+    end
+
+    call_op(:matmul)
+
+    return shape
+end
+
+function adjoint(dst, x, shape)
+    m, n = shape
+
+    @static if Sys.iswindows()
+        mov_imm(RAX, dst)
+        lea_indexed(RCX, MEM, RAX, 8)
+
+        mov_imm(RAX, x)
+        lea_indexed(RDX, MEM, RAX, 8)
+
+        mov_imm(R8, m)
+        mov_imm(R9, n)
+    else
+        mov_imm(RAX, dst)
+        lea_indexed(RDI, MEM, RAX, 8)
+
+        mov_imm(RAX, x)
+        lea_indexed(RSI, MEM, RAX, 8)
+
+        mov_imm(RDX, m)
+        mov_imm(RCX, n)
+    end
+
+    call_op(:adjoint)
+
+    return shape
+end

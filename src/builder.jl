@@ -14,14 +14,13 @@ is_integer(x) = is_number(x) && round(x) == x
 
 @syms plus(x, y) times(x::Any, y::Any) minus(x, y) divide(x, y) power(x, y) rem(x, y)
 @syms lt(x, y) leq(x, y) gt(x, y) geq(x, y) eq(x, y) neq(x, y)
-@syms matmul(x::Any, y::Any)
 
 is_matrix(xs) = any(x -> size(x) != (), xs)
 
 
 rules_rename = [
     @rule +(~~xs) => foldl(plus, ~~xs)
-    @rule *(~~xs::is_matrix) => foldl(matmul, ~~xs)
+    @rule *(~~xs::is_matrix) => foldl(times, ~~xs)
     @rule *(~~xs) => foldl(times, ~~xs)
     @rule ~x - ~y => minus(~x, ~y)
     @rule ~x / ~y => divide(~x, ~y)
@@ -72,10 +71,11 @@ apply_rewrite(eq) = Postwalk(PassThrough(Chain(rules_rewrite)))(value(eq))
 # the meaning of e in uniop and binop depends on the compilation pass.
 # In the early stages, it is the ershov numner
 # When IR is emitted, it is the destination
-@syms uniop(e, op::Symbol, x) binop(e, op::Symbol, x, y) ternary(e, cond, x, y)
+@syms uniop(e, op::Symbol, x::Any) binop(e, op::Symbol, x::Any, y::Any) ternary(e, cond, x, y)
 @syms unicall(op::Symbol, x::Any) bincall(op::Symbol, x::Any, y::Any) powi(p::Int)::Symbol
 @syms unicast(op::Symbol, x::Any) bincast(op::Symbol, x::Any, y::Any)
 @syms reducer(f::Any, op::Symbol, x::Any)
+@syms adjoint_(x::Any)
 
 # @syms arrayop(output_idx::Any, expr::Any, reduce::Any, shape::Any)
 
@@ -115,6 +115,7 @@ rules_codify = [
     @rule sqrt(~x) => uniop(0, :sqrt, rewrite(~x))
     @rule cbrt(~x) => unicall(:cbrt, rewrite(~x))
 
+    @rule adjoint(~x) => adjoint_(rewrite(~x))
     @rule broadcast(~op, ~x) => unicast(Symbol(~op), rewrite(~x))
     @rule broadcast(~op, ~x, ~y) => bincast(Symbol(~op), rewrite(~x), rewrite(~y))
     @rule Symbolics._mapreduce(~f, ~op, ~x, ~a, ~b) => reducer(~f, Symbol(~op), rewrite(~x))
@@ -254,7 +255,7 @@ function build(t, states, obs, diffs; params = [], unroll=true)
 
     for (lhs, eq) in eqs
         rhs = rewrite(eq)
-        println(lhs, " = ", rhs)
+        println(lhs, " ~ ", rhs)
         if size(lhs) == ()
             push!(builder.eqs, lhs ~ propagate(builder, rhs))
         else
@@ -290,10 +291,10 @@ function propagate(builder::Builder, eq)
             return propagate_unicast(builder, eq)
         elseif head == bincast
             return propagate_bincast(builder, eq)
-        elseif head == matmul
-            return propagate_matmul(builder, eq)
         elseif head == reducer
             return propagate_reduce(builder, eq)
+        elseif head == adjoint_
+            return propagate_adjoint(builder, eq)
         elseif head == getindex
             return eq
         else
@@ -313,6 +314,11 @@ end
 
 function propagate_binop(builder::Builder, eq)
     e, op, x, y = arguments(eq)
+
+    if is_array_of_symbolics(x) || is_array_of_symbolics(y)
+        return propagate_matmul(builder, x, y)
+    end
+
     x = propagate(builder, x)
     y = propagate(builder, y)
     e = calc_ershov(x, y)
@@ -355,6 +361,11 @@ end
 function propagate_unicall(builder::Builder, eq)
     op, x = arguments(eq)
     x = propagate(builder, x)
+
+    if op == :Ref
+        return x
+    end
+
     t = new_temp!(builder)
     push!(builder.eqs, t ~ unicall(op, x))
     return t
@@ -432,12 +443,25 @@ function propagate_bincast(builder::Builder, eq)
     return arr_t
 end
 
-function propagate_matmul(builder::Builder, eq)
-    x, y = arguments(eq)
-    x = propagate(builder, x)
-    y = propagate(builder, y)
-    t = new_temp!(builder, size(x * y))
-    push!(builder.eqs, loop(t, matmul(x, y)))
+function propagate_matmul(builder::Builder, x, y)
+    x = propagate(builder, unref(x))
+    y = propagate(builder, unref(y))
+
+    m, n = size(x)
+    n2, l = size(y)
+    @assert n == n2
+
+    t = new_temp!(builder, (m, l))
+    push!(builder.eqs, matmul(t, x, y, (m, n, l)))
+    return t
+end
+
+function propagate_adjoint(builder::Builder, eq)
+    x = arguments(eq)[1]
+    m, n = size(x)
+    x = propagate(builder, unref(x))
+    t = new_temp!(builder, (n, m))
+    push!(builder.eqs, set_adjoint(t, x, (m, n)))
     return t
 end
 

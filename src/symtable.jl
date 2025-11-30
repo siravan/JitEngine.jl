@@ -61,10 +61,18 @@ function add_param!(syms::SymbolTable, v, shape=())
 end
 
 function new_temp!(syms::SymbolTable, shape=())
-    n = syms.size_stack
-    v = create_variable("θ$n", shape)
-    syms.vars[v] = Variable(stack(n), shape)
-    syms.size_stack += prod(shape)
+    if shape == ()
+        n = syms.size_stack
+        v = create_variable("θ$n", shape)
+        syms.vars[v] = Variable(stack(n), shape)
+        syms.size_stack += prod(shape)
+    else
+        n = syms.size_mem
+        v = create_variable("θ$n", shape)
+        syms.vars[v] = Variable(mem(n), shape)
+        syms.size_mem += prod(shape)
+    end
+
     return v
 end
 
