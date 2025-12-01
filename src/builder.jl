@@ -17,11 +17,9 @@ is_integer(x) = is_number(x) && round(x) == x
 
 is_matrix(xs) = any(x -> size(x) != (), xs)
 
-
 rules_rename = [
     @rule +(~~xs) => foldl(plus, ~~xs)
-    @rule *(~~xs::is_matrix) => foldl(times, ~~xs)
-    @rule *(~~xs) => foldl(times, ~~xs)
+    @rule ~x * ~y => times(~x, ~y)
     @rule ~x - ~y => minus(~x, ~y)
     @rule ~x / ~y => divide(~x, ~y)
     @rule ^(~x, ~y) => power(~x, ~y)
@@ -34,7 +32,7 @@ rules_rename = [
     @rule ~x != ~y => neq(~x, ~y)
 ]
 
-apply_rename(eq) = Postwalk(PassThrough(Chain(rules_rename)))(value(eq))
+apply_rename(eq) = Prewalk(PassThrough(Chain(rules_rename)))(value(eq))
 
 ################### Rewrite Operators #######################
 
@@ -71,11 +69,17 @@ apply_rewrite(eq) = Postwalk(PassThrough(Chain(rules_rewrite)))(value(eq))
 # the meaning of e in uniop and binop depends on the compilation pass.
 # In the early stages, it is the ershov numner
 # When IR is emitted, it is the destination
-@syms uniop(e, op::Symbol, x::Any) binop(e, op::Symbol, x::Any, y::Any) ternary(e, cond, x, y)
+@syms uniop(e, op::Symbol, x::Any) binop(e, op::Symbol, x::Any, y::Any) ternary(
+    e,
+    cond,
+    x,
+    y,
+)
 @syms unicall(op::Symbol, x::Any) bincall(op::Symbol, x::Any, y::Any) powi(p::Int)::Symbol
 @syms unicast(op::Symbol, x::Any) bincast(op::Symbol, x::Any, y::Any)
 @syms reducer(f::Any, op::Symbol, x::Any)
 @syms adjoint_(x::Any)
+@syms as_scalar(x::Any)
 
 # @syms arrayop(output_idx::Any, expr::Any, reduce::Any, shape::Any)
 
@@ -114,12 +118,12 @@ rules_codify = [
     @rule cube(~x) => uniop(0, :cube, rewrite(~x))
     @rule sqrt(~x) => uniop(0, :sqrt, rewrite(~x))
     @rule cbrt(~x) => unicall(:cbrt, rewrite(~x))
-
     @rule adjoint(~x) => adjoint_(rewrite(~x))
     @rule broadcast(~op, ~x) => unicast(Symbol(~op), rewrite(~x))
     @rule broadcast(~op, ~x, ~y) => bincast(Symbol(~op), rewrite(~x), rewrite(~y))
-    @rule Symbolics._mapreduce(~f, ~op, ~x, ~a, ~b) => reducer(~f, Symbol(~op), rewrite(~x))
-
+    @rule Symbolics._mapreduce(~f, ~op, ~x, ~a, ~b) =>
+        reducer(~f, Symbol(~op), rewrite(~x))
+    @rule getindex(~arr, 1) => as_scalar(rewrite(~arr))
     @rule ifelse(~cond, ~x, ~y) => ternary(0, ~cond, rewrite(~x), rewrite(~y))
     @rule (~f)(~x) => unicall(Symbol(~f), rewrite(~x))
 ]
@@ -162,7 +166,7 @@ mutable struct Builder
     count_loops::Int
 end
 
-new_temp!(builder::Builder, shape=()) = new_temp!(builder.syms, shape)
+new_temp!(builder::Builder, shape = ()) = new_temp!(builder.syms, shape)
 
 state_name(i) = "σ$(i-1)"
 obs_name(i) = "Ψ$(i-1)"
@@ -178,7 +182,7 @@ diff_name(i) = "δ$(i-1)"
 #       a single state variable. It can be empty.
 #   params: (optional)
 #
-function build(t, states, obs, diffs; params = [], unroll=true)
+function build(t, states, obs, diffs; params = [], unroll = true)
     eqs = Any[]
     syms = SymbolTable()
 
@@ -250,12 +254,11 @@ function build(t, states, obs, diffs; params = [], unroll=true)
         length(obs),
         length(diffs),
         length(params),
-        0
+        0,
     )
 
     for (lhs, eq) in eqs
         rhs = rewrite(eq)
-        println(lhs, " ~ ", rhs)
         if size(lhs) == ()
             push!(builder.eqs, lhs ~ propagate(builder, rhs))
         else
@@ -295,6 +298,8 @@ function propagate(builder::Builder, eq)
             return propagate_reduce(builder, eq)
         elseif head == adjoint_
             return propagate_adjoint(builder, eq)
+        elseif head == as_scalar
+            return propagate_as_scalar(builder, eq)
         elseif head == getindex
             return eq
         else
@@ -305,6 +310,13 @@ function propagate(builder::Builder, eq)
     end
 end
 
+function propagate_as_scalar(builder::Builder, eq)
+    x, = arguments(eq)
+    x = propagate(builder, x)
+    t = new_cover(builder.syms, x, ())
+    return t
+end
+
 function propagate_uniop(builder::Builder, eq)
     e, op, x = arguments(eq)
     x = propagate(builder, x)
@@ -312,28 +324,48 @@ function propagate_uniop(builder::Builder, eq)
     return uniop(e, op, x)
 end
 
+function mat_size(x)
+    if ndims(x) == 1
+        return (size(x)[1], 1)
+    elseif ndims(x) > 2
+        error("matrix cannot have more than two dimensins")
+    else
+        return size(x)
+    end
+end
+
 function propagate_binop(builder::Builder, eq)
     e, op, x, y = arguments(eq)
 
-    if is_array_of_symbolics(x) || is_array_of_symbolics(y)
-        return propagate_matmul(builder, x, y)
-    end
+    x = propagate(builder, unref(x))
+    y = propagate(builder, unref(y))
 
-    x = propagate(builder, x)
-    y = propagate(builder, y)
-    e = calc_ershov(x, y)
-    u = binop(e, op, x, y)
-
-    if e < (LOGICAL_REGS - 2)
-        return u
+    if size(x) != () || size(y) != ()
+        if op == :times
+            m, n = mat_size(x)
+            n2, l = mat_size(y)
+            @assert n == n2
+            t = new_temp!(builder, (m, l))
+            push!(builder.eqs, matmul(t, x, y, (m, n, l)))
+            return t
+        else
+            error("todo!")
+        end
     else
-        # we need to break the tree and introduce a new
-        # temporary variable here to ensure register
-        # allocation algorithm does not run out of registers.
-        # This is part of the Sethi–Ullman algorithm.
-        t = new_temp!(builder)
-        push!(builder.eqs, t ~ u)
-        return t
+        e = calc_ershov(x, y)
+        u = binop(e, op, x, y)
+
+        if e < (LOGICAL_REGS - 2)
+            return u
+        else
+            # we need to break the tree and introduce a new
+            # temporary variable here to ensure register
+            # allocation algorithm does not run out of registers.
+            # This is part of the Sethi–Ullman algorithm.
+            t = new_temp!(builder)
+            push!(builder.eqs, t ~ u)
+            return t
+        end
     end
 end
 
@@ -366,18 +398,27 @@ function propagate_unicall(builder::Builder, eq)
         return x
     end
 
-    t = new_temp!(builder)
-    push!(builder.eqs, t ~ unicall(op, x))
-    return t
+    if size(x) != ()
+        return propagate_unicast(builder, unicast(op, x))
+    else
+        t = new_temp!(builder)
+        push!(builder.eqs, t ~ unicall(op, x))
+        return t
+    end
 end
 
 function propagate_bincall(builder::Builder, eq)
     op, x, y = arguments(eq)
     x = propagate(builder, x)
     y = propagate(builder, y)
-    t = new_temp!(builder)
-    push!(builder.eqs, t ~ bincall(op, x, y))
-    return t
+
+    if size(x) != () || size(y) != ()
+        return propagate_bincast(builder, bincast(op, x, y))
+    else
+        t = new_temp!(builder)
+        push!(builder.eqs, t ~ bincall(op, x, y))
+        return t
+    end
 end
 
 function propagate_unicast(builder::Builder, eq)
@@ -443,23 +484,11 @@ function propagate_bincast(builder::Builder, eq)
     return arr_t
 end
 
-function propagate_matmul(builder::Builder, x, y)
-    x = propagate(builder, unref(x))
-    y = propagate(builder, unref(y))
-
-    m, n = size(x)
-    n2, l = size(y)
-    @assert n == n2
-
-    t = new_temp!(builder, (m, l))
-    push!(builder.eqs, matmul(t, x, y, (m, n, l)))
-    return t
-end
-
 function propagate_adjoint(builder::Builder, eq)
     x = arguments(eq)[1]
-    m, n = size(x)
     x = propagate(builder, unref(x))
+
+    m, n = mat_size(x)
     t = new_temp!(builder, (n, m))
     push!(builder.eqs, set_adjoint(t, x, (m, n)))
     return t

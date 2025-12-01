@@ -40,7 +40,14 @@ _cbrt(x::Float64)::Float64 = cbrt(x)
 _power(x::Float64, y::Float64)::Float64 = x ^ y
 
 # Dst[m, l] = X[m, n] * Y[n, l]
-function _matmul(dst::Ptr{Float64}, x::Ptr{Float64}, y::Ptr{Float64}, m::Int32, n::Int32, l::Int32)
+function _matmul(
+    dst::Ptr{Float64},
+    x::Ptr{Float64},
+    y::Ptr{Float64},
+    m::Int32,
+    n::Int32,
+    l::Int32,
+)
     Dst = unsafe_wrap(Matrix{Float64}, dst, (m, l))
     X = unsafe_wrap(Matrix{Float64}, x, (m, n))
     Y = unsafe_wrap(Matrix{Float64}, y, (n, l))
@@ -91,8 +98,11 @@ function func_pointers()
         :sqrt => @cfunction(_sqrt, Cdouble, (Cdouble,)),
         :cbrt => @cfunction(_cbrt, Cdouble, (Cdouble,)),
         :power => @cfunction(_power, Cdouble, (Cdouble, Cdouble)),
-
-        :matmul => @cfunction(_matmul, Cvoid, (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Cint, Cint, Cint)),
+        :matmul => @cfunction(
+            _matmul,
+            Cvoid,
+            (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Cint, Cint, Cint)
+        ),
         :adjoint => @cfunction(_adjoint, Cvoid, (Ptr{Cdouble}, Ptr{Cdouble}, Cint, Cint)),
     )
 end

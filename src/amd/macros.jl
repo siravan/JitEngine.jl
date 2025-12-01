@@ -315,7 +315,7 @@ function matmul(dst, x, y, shape)
 
         call_op(:matmul)
 
-        add_rsp(32)
+        add_rsp(16)
     else
         mov_imm(RAX, dst)
         lea_indexed(RDI, MEM, RAX, 8)

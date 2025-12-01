@@ -1,3 +1,6 @@
+# ω means no register
+@syms ω
+
 rules_extract = [
     @rule load(~dst, ~x) => (~dst, ω, ω, ω)
     @rule load_const(~dst, ~x, ~idx) => (~dst, ω, ω, ω)
@@ -9,15 +12,19 @@ rules_extract = [
     @rule ternary(~dst, ~r1, ~r2, ~r3) => (~dst, ~r1, ~r2, ~r3)
     @rule call_func(~op) => (σ0, ω, ω, ω)
     @rule mov(~dst, ~r1) => (~dst, ~r1, ω, ω)
-    @rule set_label(~label) => (ω, ω, ω, ω)
-    @rule branch_if(~limit, ~label) => (ω, ω, ω, ω)
-    @rule reset_index() => (ω, ω, ω, ω)
-    @rule inc_index() => (ω, ω, ω, ω)
-    @rule matmul(~dst, ~r1, ~r2, ~shape) => (ω, ω, ω, ω)
-    @rule set_adjoint(~dst, ~r1, ~shape) => (ω, ω, ω, ω)
 ]
 
-apply_extract(eq) = Chain(rules_extract)(value(eq))
+function apply_extract(eq)
+    eq = value(eq)
+
+    for r in rules_extract
+        e = r(eq)
+        if e != nothing
+            return e
+        end
+    end
+    return (ω, ω, ω, ω)
+end
 
 function allocate(mir::MIR)
     # registers 0 and 1 have special meanings and

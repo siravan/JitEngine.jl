@@ -20,7 +20,7 @@ function push_new_reg!(mir::MIR, f)
     return r
 end
 
-@syms σ0 σ1 ω
+@syms σ0 σ1
 
 function new_reg(mir::MIR)
     r = mir.count_regs

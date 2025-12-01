@@ -1,6 +1,6 @@
 struct Variable
-    loc
-    shape
+    loc::Any
+    shape::Any
 end
 
 mutable struct SymbolTable
@@ -8,8 +8,9 @@ mutable struct SymbolTable
     size_mem::Int
     size_param::Int
     size_stack::Int
+    size_cover::Int
 
-    SymbolTable() = new(Dict(), 0, 0, 0)
+    SymbolTable() = new(Dict(), 0, 0, 0, 0)
 end
 
 next_mem(syms::SymbolTable) = syms.size_mem
@@ -33,34 +34,34 @@ function create_variable(name, shape)
     return v
 end
 
-function add_mem!(syms::SymbolTable, name::String, shape=())
+function add_mem!(syms::SymbolTable, name::String, shape = ())
     return add_mem!(syms, create_variable(name, shape), shape)
 end
 
-function add_mem!(syms::SymbolTable, v, shape=())
+function add_mem!(syms::SymbolTable, v, shape = ())
     syms.vars[v] = Variable(mem(syms.size_mem), shape)
     syms.size_mem += prod(shape)
     return v
 end
 
-function add_alias!(syms::SymbolTable, name::String, shape=())
+function add_alias!(syms::SymbolTable, name::String, shape = ())
     return add_alias!(syms, create_variable(name, shape), shape)
 end
 
-function add_alias!(syms::SymbolTable, v, shape=())
+function add_alias!(syms::SymbolTable, v, shape = ())
     v = value(v)
     syms.vars[v] = Variable(mem(syms.size_mem), shape)
     return v
 end
 
-function add_param!(syms::SymbolTable, v, shape=())
+function add_param!(syms::SymbolTable, v, shape = ())
     v = value(v)
     syms.vars[v] = Variable(param(syms.size_param), shape)
     syms.size_param += prod(shape)
     return v
 end
 
-function new_temp!(syms::SymbolTable, shape=())
+function new_temp!(syms::SymbolTable, shape = ())
     if shape == ()
         n = syms.size_stack
         v = create_variable("θ$n", shape)
@@ -73,6 +74,14 @@ function new_temp!(syms::SymbolTable, shape=())
         syms.size_mem += prod(shape)
     end
 
+    return v
+end
+
+function new_cover(syms::SymbolTable, old_var, shape)
+    n = syms.size_cover
+    v = create_variable("γ$n", shape)
+    syms.vars[v] = Variable(syms.vars[old_var].loc, shape)
+    syms.size_cover += 1
     return v
 end
 
@@ -92,6 +101,6 @@ function extract_idx(v::Variable)
     nothing
 end
 
-function rename(syms::SymbolTable, dst, src)
-    syms.vars[src] = syms.vars[dst]
+function rename(syms::SymbolTable, lhs, rhs)
+    syms.vars[lhs] = syms.vars[rhs]
 end

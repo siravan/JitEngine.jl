@@ -40,7 +40,8 @@ rules_gen_amd = [
     @rule save_indexed(stack(~idx), ~src) => Amd.save_stack_indexed(θ(~src), θ(~idx))
     @rule set_label(~label) => Amd.set_label(~label)
     @rule branch_if(~limit, ~label) => Amd.branch_if(~limit, ~label)
-    @rule matmul(mem(~dst), mem(~x), mem(~y), ~shape) => Amd.matmul(~dst, ~x, ~y, ~shape)
+    @rule matmul(mem(~dst), mem(~x), mem(~y), ~shape) =>
+        Amd.matmul(~dst, ~x, ~y, ~shape)
     @rule set_adjoint(mem(~dst), mem(~x), ~shape) => Amd.adjoint(~dst, ~x, ~shape)
 ]
 
