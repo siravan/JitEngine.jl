@@ -4,9 +4,10 @@ mutable struct Assembler
     jumps::Vector{Any}
     delta::Int
     shift::Int
+    mask::Int
 
-    Assembler(delta, shift) =
-        new(Vector{UInt8}[], Dict{String,Int}(), Vector{Any}(), delta, shift)
+    Assembler(delta, shift, mask=0xffffffff) =
+        new(Vector{UInt8}[], Dict{String,Int}(), Vector{Any}(), delta, shift, mask)
 end
 
 function bytes()
@@ -69,9 +70,10 @@ function apply_jumps()
     for (label, k, code) in asm.jumps
         target = asm.labels[label]
         offset = target - k + asm.delta
-
-        x = (offset << asm.shift) | code
-
+println(offset)
+println(asm.mask)
+        x = ((offset << asm.shift) & asm.mask) | code
+println(x)
         asm.buf[k] |= (x & 0xff)
         asm.buf[k+1] |= (x >> 8) & 0xff
         asm.buf[k+2] |= (x >> 16) & 0xff

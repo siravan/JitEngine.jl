@@ -1,8 +1,8 @@
-asm = Assembler(0, 3)
+asm = Assembler(0, 3, 0x00ffffe0)
 
 function reset()
     global asm
-    asm = Assembler(0, 3)
+    asm = Assembler(0, 3, 0x00ffffe0)
 end
 
 include("asm.jl")
@@ -25,11 +25,11 @@ function load_immediate(dst, imm::Int64)
         movk_lsl16(dst, (imm >> 16) & 0xffff)
     end
 
-    if idx >= 2^32
+    if imm >= 2^32
         movk_lsl32(dst, (imm >> 32) & 0xffff)
     end
 
-    if idx >= 2^48
+    if imm >= 2^48
         movk_lsl48(dst, (imm >> 48) & 0xffff)
     end
 end
@@ -232,8 +232,8 @@ end
 
 function call_op(op)
     label = "_func_$(op)_"
-    ldr_x_label(0, label)
-    blr(0)
+    ldr_x_label(SCRATCH1, label)
+    blr(SCRATCH1)
 end
 
 function align() end
@@ -256,10 +256,10 @@ end
 
 function prologue(cap)
     sub_x_imm(:sp, :sp, 32)
-    str_x(:lr, :sp, 0)
-    str_x(MEM, :sp, 8)
-    str_x(PARAMS, :sp, 16)
-    str_x(INDEX, :sp, 24)
+    str_x_offset(:lr, :sp, 0)
+    str_x_offset(MEM, :sp, 8)
+    str_x_offset(PARAMS, :sp, 16)
+    str_x_offset(INDEX, :sp, 24)
 
     mov(MEM, 0)
     mov(PARAMS, 3)
@@ -272,10 +272,10 @@ function epilogue(cap)
     stack_size = align_stack(8 * cap)
     add_stack(stack_size)
 
-    ldr_x(INDEX, :sp, 24)
-    ldr_x(PARAMS, :sp, 16)
-    ldr_x(MEM, :sp, 8)
-    ldr_x(:lr, :sp, 0)
+    ldr_x_offset(INDEX, :sp, 24)
+    ldr_x_offset(PARAMS, :sp, 16)
+    ldr_x_offset(MEM, :sp, 8)
+    ldr_x_offset(:lr, :sp, 0)
 
     add_x_imm(:sp, :sp, 32)
     ret()
@@ -312,7 +312,7 @@ function save_stack_indexed(src, idx)
 end
 
 function reset_index()
-    add_x_imm(INDEX, ZERO, 0)
+    movz(INDEX, 0)
 end
 
 function inc_index()
@@ -322,7 +322,7 @@ end
 function branch_if(limit, label)
     load_immediate(SCRATCH2, limit)
     cmp_x(INDEX, SCRATCH2)
-    b_le(label)
+    b_lt(label)
 end
 
 function matmul(dst, x, y, shape)

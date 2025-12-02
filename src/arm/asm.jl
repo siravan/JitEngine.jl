@@ -171,6 +171,9 @@ function sub_x(rd, rn, rm, lsl = false)
 end
 
 cmp_x(rn, rm) = append_word(0xeb00001f | rn!(rn) | rm!(rm))
+and_x(rd, rn, rm) = append_word(0x8a000000 | rd!(rd) | rn!(rn) | rm!(rm))
+orr_x(rd, rn, rm) = append_word(0xaa000000 | rd!(rd) | rn!(rn) | rm!(rm))
+eor_x(rd, rn, rm) = append_word(0xca000000 | rd!(rd) | rn!(rn) | rm!(rm))
 
 # floating point ops
 
