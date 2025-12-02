@@ -7,43 +7,82 @@ end
 
 include("asm.jl")
 
-const MEM = 19      # first arg = mem if direct mode, otherwise null
-const STATES = 21   #second arg = states+obs if indirect mode, otherwise null
-const IDX = 22      #third arg = index if indirect mode
-const PARAMS = 20   #fourth arg = params
+const ZERO = 31
+
+const MEM = 19
+const PARAMS = 20
+const INDEX = 21
+
 const RET = 0
 const TEMP = 1
 const SCRATCH1 = 9
 const SCRATCH2 = 10
 
+function load_immediate(dst, imm::Int64)
+    movz(dst, imm & 0xffff)
 
-function load_d_from_mem(d, base, idx)
-    if idx < 4096
-        ldr_d(d, base, 8 * idx)
-    else
+    if imm >= 2^16
+        movk_lsl16(dst, (imm >> 16) & 0xffff)
+    end
+
+    if idx >= 2^32
+        movk_lsl32(dst, (imm >> 32) & 0xffff)
+    end
+
+    if idx >= 2^48
+        movk_lsl48(dst, (imm >> 48) & 0xffff)
+    end
+end
+
+function load_d_from_mem(d, base, idx::Int64)
+    @assert idx >= 0
+
+    if idx < 2^12
+        ldr_d_offset(d, base, 8 * idx)
+    elseif idx < 2^16
         movz(SCRATCH1, idx)
-        ldr_d(d, base, SCRATCH1, true)
+        ldr_d(d, base, SCRATCH1)
+    elseif idx < 2^32
+        movz(SCRATCH1, idx & 0xffff)
+        movk_lsl16(SCRATCH1, idx >> 16)
+        ldr_d(d, base, SCRATCH1)
+    else
+        error("index out of range")
     end
     return true
 end
 
-function save_d_to_mem(d, base, idx)
-    if idx < 4096
-        str_d(d, base, 8 * idx)
-    else
+function save_d_to_mem(d, base, idx::Int64)
+    @assert idx >= 0
+
+    if idx < 2^12
+        str_d_offset(d, base, 8 * idx)
+    elseif idx < 2^16
         movz(SCRATCH1, idx)
-        str_d(d, base, SCRATCH1, true)
+        str_d(d, base, SCRATCH1)
+    elseif idx < 2^32
+        movz(SCRATCH1, idx & 0xffff)
+        movk_lsl16(SCRATCH1, idx >> 16)
+        str_d(d, base, SCRATCH1)
+    else
+        error("index out of range")
     end
 end
 
-function load_x_from_mem(r, base, idx)
-    @assert r != SCRATCH1
+function load_x_from_mem(r, base, idx::Int64)
+    @assert r != SCRATCH1 && idx >= 0
 
-    if idx < 4096
-        ldr_x(r, base, 8 * idx)
-    else
+    if idx < 2^12
+        ldr_x_offset(r, base, 8 * idx)
+    elseif idx < 2^16
         movz(SCRATCH1, idx)
-        ldr_x(r, base, SCRATCH1, true)
+        ldr_x(r, base, SCRATCH1)
+    elseif idx < 2^32
+        movz(SCRATCH1, idx & 0xffff)
+        movk_lsl16(SCRATCH1, idx >> 16)
+        ldr_x(r, base, SCRATCH1)
+    else
+        error("index out of range")
     end
 end
 
@@ -216,16 +255,13 @@ function seal()
 end
 
 function prologue(cap)
-    sub_x_imm(:sp, :sp, 48)
+    sub_x_imm(:sp, :sp, 32)
     str_x(:lr, :sp, 0)
     str_x(MEM, :sp, 8)
     str_x(PARAMS, :sp, 16)
-    # str_x(STATES, :sp, 24)
-    # str_x(IDX, :sp, 32)
+    str_x(INDEX, :sp, 24)
 
     mov(MEM, 0)
-    # mov(STATES, 1)
-    # mov(IDX, 2)
     mov(PARAMS, 3)
 
     stack_size = align_stack(8 * cap)
@@ -236,12 +272,93 @@ function epilogue(cap)
     stack_size = align_stack(8 * cap)
     add_stack(stack_size)
 
-    # ldr_x(IDX, :sp, 32)
-    # ldr_x(STATES, :sp, 24)
+    ldr_x(INDEX, :sp, 24)
     ldr_x(PARAMS, :sp, 16)
     ldr_x(MEM, :sp, 8)
     ldr_x(:lr, :sp, 0)
 
-    add_x_imm(:sp, :sp, 48)
+    add_x_imm(:sp, :sp, 32)
     ret()
+end
+
+###################### Array Ops ###########################
+
+function scratch(idx)
+    add_x_imm(SCRATCH2, INDEX, idx & 0x0fff, false)
+    if idx >= 2^12
+        add_x_imm(SCRATCH2, SCRATCH2, idx >> 12, true)
+    end
+    return SCRATCH2
+end
+
+function load_mem_indexed(dst, idx)
+    s = scratch(idx)
+    ldr_d(dst, MEM, s)
+end
+
+function save_mem_indexed(src, idx)
+    s = scratch(idx)
+    str_d(src, MEM, s)
+end
+
+function load_stack_indexed(dst, idx)
+    s = scratch(idx)
+    ldr_d(dst, :sp, s)
+end
+
+function save_stack_indexed(src, idx)
+    s = scratch(idx)
+    str_d(src, :sp, s)
+end
+
+function reset_index()
+    add_x_imm(INDEX, ZERO, 0)
+end
+
+function inc_index()
+    add_x_imm(INDEX, INDEX, 1)
+end
+
+function branch_if(limit, label)
+    load_immediate(SCRATCH2, limit)
+    cmp_x(INDEX, SCRATCH2)
+    b_le(label)
+end
+
+function matmul(dst, x, y, shape)
+    m, n, l = shape
+
+    load_immediate(0, dst)
+    add_x(0, MEM, 0, true)
+
+    load_immediate(1, x)
+    add_x(1, MEM, 1, true)
+
+    load_immediate(2, y)
+    add_x(2, MEM, 2, true)
+
+    load_immediate(3, m)
+    load_immediate(4, n)
+    load_immediate(5, l)
+
+    call_op(:matmul)
+
+    return shape
+end
+
+function adjoint(dst, x, shape)
+    m, n = shape
+
+    load_immediate(0, dst)
+    add_x(0, MEM, 0, true)
+
+    load_immediate(1, x)
+    add_x(1, MEM, 1, true)
+
+    load_immediate(2, m)
+    load_immediate(3, n)
+
+    call_op(:adjoint)
+
+    return shape
 end

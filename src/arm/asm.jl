@@ -73,23 +73,28 @@ mov(rd, rm) = append_word(0xaa0003e0 | rd!(rd) | rm!(rm))
 # movz x(rd), #imm16
 movz(rd, imm16) = append_word(0xd2800000 | rd!(rd) | imm16!(imm16))
 
+# movk x(rd), #imm16, lsl #16
+movk_lsl16(rd, imm16) = append_word(0xf2a00000 | rd!(rd) | imm16!(imm16))
+
+# movk x(rd), #imm16, lsl #32
+movk_lsl32(rd, imm16) = append_word(0xf2c00000 | rd!(rd) | imm16!(imm16))
+
+# movk x(rd), #imm16, lsl #48
+movk_lsl48(rd, imm16) = append_word(0xf2e00000 | rd!(rd) | imm16!(imm16))
+
 # single register load/store instructions
 # ldr d(rd), [x(rn), #ofs]
-# # ldr d(rd), [x(rn), x(rm), lsl #3]
-function ldr_d(rd, rn, ofs, lsl = false)
-    if lsl
-        w = 0xfc607800 | rd!(rd) | rn!(rn) | rm!(rm)
-    else
-        w = 0xfd400000 | rd!(rd) | rn!(rn) | ofs!(ofs)
-    end
-    append_word(w)
-end
+ldr_d_offset(rd, rn, ofs) = append_word(0xfd400000 | rd!(rd) | rn!(rn) | ofs!(ofs))
+
+# single register load/store instructions
+# ldr d(rd), [x(rn), x(rm), lsl #3]
+ldr_d(rd, rn, rm) = append_word(0xfc607800 | rd!(rd) | rn!(rn) | rm!(rm))
 
 # ldr x(rd), [x(rn), #ofs]
-ldr_x(rd, rn, ofs) = append_word(0xf9400000 | rd!(rd) | rn!(rn) | ofs!(ofs))
+ldr_x_offset(rd, rn, ofs) = append_word(0xf9400000 | rd!(rd) | rn!(rn) | ofs!(ofs))
 
 # ldr x(rd), [x(rn), x(rm), lsl #3]
-ldr_x(rd, rn, rm, lsl) = append_word(0xf8607800 | rd!(rd) | rn!(rn) | rm!(rm))
+ldr_x(rd, rn, rm) = append_word(0xf8607800 | rd!(rd) | rn!(rn) | rm!(rm))
 
 # ldr d(rd), label
 ldr_d_label(rd, label) = jump(label, 0x5c000000 | rd!(rd))
@@ -98,18 +103,13 @@ ldr_d_label(rd, label) = jump(label, 0x5c000000 | rd!(rd))
 ldr_x_label(rd, label) = jump(label, 0x58000000 | rd!(rd))
 
 # str d(rd), [x(rn), #ofs:expr]
+str_d_offset(rd, rn, ofs) = append_word(0xfd000000 | rd!(rd) | rn!(rn) | ofs!(ofs))
+
 # str d(rd), [x(rn), x(rm), lsl #3]
-function str_d(rd, rn, ofs, lsl = false)
-    if lsl
-        w = 0xfc207800 | rd!(rd) | rn!(rn) | rm!(rm)
-    else
-        w = 0xfd000000 | rd!(rd) | rn!(rn) | ofs!(ofs)
-    end
-    append_word(w)
-end
+str_d(rd, rn, rm) = append_word(0xfc207800 | rd!(rd) | rn!(rn) | rm!(rm))
 
 # str x(rd), [x(rn), #ofs]
-str_x(rd, rn, ofs) = append_word(0xf9000000 | rd!(rd) | rn!(rn) | ofs!(ofs))
+str_x_offset(rd, rn, ofs) = append_word(0xf9000000 | rd!(rd) | rn!(rn) | ofs!(ofs))
 
 # paired-registers load/store instructions
 # ldp d(rd), d(rd2), [x(rn), #of7]
@@ -151,6 +151,26 @@ function sub_x_imm(rd, rn, imm, lsl = false)
     end
     append_word(w)
 end
+
+function add_x(rd, rn, rm, lsl = false)
+    if lsl
+        w = 0x8b000c00 | rd!(rd) | rn!(rn) | rm!(rm)
+    else
+        w = 0x8b000000 | rd!(rd) | rn!(rn) | rm!(rm)
+    end
+    append_word(w)
+end
+
+function sub_x(rd, rn, rm, lsl = false)
+    if lsl
+        w = 0xcb000c00 | rd!(rd) | rn!(rn) | rm!(rm)
+    else
+        w = 0xcb000000 | rd!(rd) | rn!(rn) | rm!(rm)
+    end
+    append_word(w)
+end
+
+cmp_x(rn, rm) = append_word(0xeb00001f | rn!(rn) | rm!(rm))
 
 # floating point ops
 

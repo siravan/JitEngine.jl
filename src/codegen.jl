@@ -76,6 +76,18 @@ rules_gen_arm = [
     @rule ternary(~dst, ~cond, ~x, ~y) =>
         Arm.select_if(θ(~dst), θ(~cond), θ(~x), θ(~y))
     @rule call_func(~op) => Arm.call_op(~op)
+    #################### Array Ops ####################
+    @rule reset_index() => Arm.reset_index()
+    @rule inc_index() => Arm.inc_index()
+    @rule load_indexed(~dst, mem(~idx)) => Arm.load_mem_indexed(θ(~dst), θ(~idx))
+    @rule load_indexed(~dst, stack(~idx)) => Arm.load_stack_indexed(θ(~dst), θ(~idx))
+    @rule save_indexed(mem(~idx), ~src) => Arm.save_mem_indexed(θ(~src), θ(~idx))
+    @rule save_indexed(stack(~idx), ~src) => Arm.save_stack_indexed(θ(~src), θ(~idx))
+    @rule set_label(~label) => Arm.set_label(~label)
+    @rule branch_if(~limit, ~label) => Arm.branch_if(~limit, ~label)
+    @rule matmul(mem(~dst), mem(~x), mem(~y), ~shape) =>
+        Arm.matmul(~dst, ~x, ~y, ~shape)
+    @rule set_adjoint(mem(~dst), mem(~x), ~shape) => Arm.adjoint(~dst, ~x, ~shape)
 ]
 
 function apply_gen(x)
