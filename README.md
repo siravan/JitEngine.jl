@@ -240,4 +240,4 @@ heatmap(m .< 4.0; aspect_ratio = :equal)
 
 The output is
 
-![menderbrot](./figures/menderbrot.png)
+![mendelbrot](./figures/mendelbrot.png)
