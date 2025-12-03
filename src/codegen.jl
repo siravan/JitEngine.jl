@@ -9,12 +9,12 @@ function θ(x)
 end
 
 rules_gen_amd = [
-    @rule load(~dst, mem(~idx)) => Amd.load_mem(θ(~dst), θ(~idx))
-    @rule load(~dst, param(~idx)) => Amd.load_param(θ(~dst), θ(~idx))
-    @rule load(~dst, stack(~idx)) => Amd.load_stack(θ(~dst), θ(~idx))
-    @rule load_const(~dst, ~val, ~idx) => Amd.load_const(θ(~dst), θ(~idx))
-    @rule save(mem(~idx), ~src) => Amd.save_mem(θ(~src), θ(~idx))
-    @rule save(stack(~idx), ~src) => Amd.save_stack(θ(~src), θ(~idx))
+    @rule load(~dst, mem(~idx)) => Amd.load_mem(θ(~dst), ~idx)
+    @rule load(~dst, param(~idx)) => Amd.load_param(θ(~dst), ~idx)
+    @rule load(~dst, stack(~idx)) => Amd.load_stack(θ(~dst), ~idx)
+    @rule load_const(~dst, ~val, ~idx) => Amd.load_const(θ(~dst), ~idx)
+    @rule save(mem(~idx), ~src) => Amd.save_mem(θ(~src), ~idx)
+    @rule save(stack(~idx), ~src) => Amd.save_stack(θ(~src), ~idx)
     @rule mov(~dst, ~x) => Amd.fmov(θ(~dst), θ(~x))
     @rule binop(~dst, :plus, ~x, ~y) => Amd.vaddsd(θ(~dst), θ(~x), θ(~y))
     @rule binop(~dst, :times, ~x, ~y) => Amd.vmulsd(θ(~dst), θ(~x), θ(~y))
@@ -42,10 +42,10 @@ rules_gen_amd = [
     #################### Array Ops ####################
     @rule reset_index() => Amd.reset_index()
     @rule inc_index() => Amd.inc_index()
-    @rule load_indexed(~dst, mem(~idx)) => Amd.load_mem_indexed(θ(~dst), θ(~idx))
-    @rule load_indexed(~dst, stack(~idx)) => Amd.load_stack_indexed(θ(~dst), θ(~idx))
-    @rule save_indexed(mem(~idx), ~src) => Amd.save_mem_indexed(θ(~src), θ(~idx))
-    @rule save_indexed(stack(~idx), ~src) => Amd.save_stack_indexed(θ(~src), θ(~idx))
+    @rule load_indexed(~dst, mem(~idx)) => Amd.load_mem_indexed(θ(~dst), ~idx)
+    @rule load_indexed(~dst, stack(~idx)) => Amd.load_stack_indexed(θ(~dst), ~idx)
+    @rule save_indexed(mem(~idx), ~src) => Amd.save_mem_indexed(θ(~src), ~idx)
+    @rule save_indexed(stack(~idx), ~src) => Amd.save_stack_indexed(θ(~src), ~idx)
     @rule set_label(~label) => Amd.set_label(~label)
     @rule branch_if(~limit, ~label) => Amd.branch_if(~limit, ~label)
     @rule matmul(mem(~dst), mem(~x), mem(~y), ~shape) =>
@@ -55,12 +55,12 @@ rules_gen_amd = [
 ]
 
 rules_gen_arm = [
-    @rule load(~dst, mem(~idx)) => Arm.load_mem(θ(~dst), θ(~idx))
-    @rule load(~dst, param(~idx)) => Arm.load_param(θ(~dst), θ(~idx))
-    @rule load(~dst, stack(~idx)) => Arm.load_stack(θ(~dst), θ(~idx))
-    @rule load_const(~dst, ~val, ~idx) => Arm.load_const(θ(~dst), θ(~idx))
-    @rule save(mem(~idx), ~src) => Arm.save_mem(θ(~src), θ(~idx))
-    @rule save(stack(~idx), ~src) => Arm.save_stack(θ(~src), θ(~idx))
+    @rule load(~dst, mem(~idx)) => Arm.load_mem(θ(~dst), ~idx)
+    @rule load(~dst, param(~idx)) => Arm.load_param(θ(~dst), ~idx)
+    @rule load(~dst, stack(~idx)) => Arm.load_stack(θ(~dst), ~idx)
+    @rule load_const(~dst, ~val, ~idx) => Arm.load_const(θ(~dst), ~idx)
+    @rule save(mem(~idx), ~src) => Arm.save_mem(θ(~src), ~idx)
+    @rule save(stack(~idx), ~src) => Arm.save_stack(θ(~src), ~idx)
     @rule mov(~dst, ~x) => Arm.fmov(θ(~dst), θ(~x))
     @rule binop(~dst, :plus, ~x, ~y) => Arm.fadd(θ(~dst), θ(~x), θ(~y))
     @rule binop(~dst, :times, ~x, ~y) => Arm.fmul(θ(~dst), θ(~x), θ(~y))
@@ -88,10 +88,10 @@ rules_gen_arm = [
     #################### Array Ops ####################
     @rule reset_index() => Arm.reset_index()
     @rule inc_index() => Arm.inc_index()
-    @rule load_indexed(~dst, mem(~idx)) => Arm.load_mem_indexed(θ(~dst), θ(~idx))
-    @rule load_indexed(~dst, stack(~idx)) => Arm.load_stack_indexed(θ(~dst), θ(~idx))
-    @rule save_indexed(mem(~idx), ~src) => Arm.save_mem_indexed(θ(~src), θ(~idx))
-    @rule save_indexed(stack(~idx), ~src) => Arm.save_stack_indexed(θ(~src), θ(~idx))
+    @rule load_indexed(~dst, mem(~idx)) => Arm.load_mem_indexed(θ(~dst), ~idx)
+    @rule load_indexed(~dst, stack(~idx)) => Arm.load_stack_indexed(θ(~dst), ~idx)
+    @rule save_indexed(mem(~idx), ~src) => Arm.save_mem_indexed(θ(~src), ~idx)
+    @rule save_indexed(stack(~idx), ~src) => Arm.save_stack_indexed(θ(~src), ~idx)
     @rule set_label(~label) => Arm.set_label(~label)
     @rule branch_if(~limit, ~label) => Arm.branch_if(~limit, ~label)
     @rule matmul(mem(~dst), mem(~x), mem(~y), ~shape) =>
