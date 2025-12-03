@@ -5,5 +5,6 @@
 @syms reset_index() inc_index() load_indexed(r, loc::Any) save_indexed(loc::Any, r)
 @syms matmul(dst::Any, x::Any, y::Any, shape::Tuple)
 @syms set_adjoint(dst::Any, x::Any, shape::Tuple)
+@syms set_inv(dst::Any, x::Any, shape::Tuple)
 
 @syms λ::Int

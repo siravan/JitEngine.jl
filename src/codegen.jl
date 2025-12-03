@@ -1,4 +1,12 @@
-θ(x) = Int(value(x))    # phyiscal register number
+# phyiscal register numbe
+function θ(x)
+    t = Int(value(x))
+    @static if Sys.ARCH == :x86_64
+        return t
+    elseif Sys.ARCH == :aarch64
+        return t < 8 ? t : t + 8    # registers d0-d7 and d16-d23
+    end
+end
 
 rules_gen_amd = [
     @rule load(~dst, mem(~idx)) => Amd.load_mem(θ(~dst), θ(~idx))
@@ -43,6 +51,7 @@ rules_gen_amd = [
     @rule matmul(mem(~dst), mem(~x), mem(~y), ~shape) =>
         Amd.matmul(~dst, ~x, ~y, ~shape)
     @rule set_adjoint(mem(~dst), mem(~x), ~shape) => Amd.adjoint(~dst, ~x, ~shape)
+    @rule set_inv(mem(~dst), mem(~x), ~shape) => Amd.inv(~dst, ~x, ~shape)
 ]
 
 rules_gen_arm = [
@@ -88,6 +97,7 @@ rules_gen_arm = [
     @rule matmul(mem(~dst), mem(~x), mem(~y), ~shape) =>
         Arm.matmul(~dst, ~x, ~y, ~shape)
     @rule set_adjoint(mem(~dst), mem(~x), ~shape) => Arm.adjoint(~dst, ~x, ~shape)
+    @rule set_inv(mem(~dst), mem(~x), ~shape) => Arm.inv(~dst, ~x, ~shape)
 ]
 
 function apply_gen(x)

@@ -63,6 +63,14 @@ function _adjoint(dst::Ptr{Float64}, x::Ptr{Float64}, m::Int32, n::Int32)
     nothing
 end
 
+# Dst = inv(X)
+function _inv(dst::Ptr{Float64}, x::Ptr{Float64}, m::Int32)
+    Dst = unsafe_wrap(Matrix{Float64}, dst, (m, m))
+    X = unsafe_wrap(Matrix{Float64}, x, (m, m))
+    Dst .= inv(X)
+    nothing
+end
+
 function func_pointers()
     return Dict{Symbol,Any}(
         :sin => @cfunction(_sin, Cdouble, (Cdouble,)),
@@ -104,5 +112,6 @@ function func_pointers()
             (Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Cint, Cint, Cint)
         ),
         :adjoint => @cfunction(_adjoint, Cvoid, (Ptr{Cdouble}, Ptr{Cdouble}, Cint, Cint)),
+        :inv => @cfunction(_inv, Cvoid, (Ptr{Cdouble}, Ptr{Cdouble}, Cint)),
     )
 end

@@ -15,5 +15,5 @@ for i = 1:10
     ed = expand_derivatives(Differential(x)(e))
     f = compile_func([x], [ed])
 
-    println(i, '\t', f([x0])[1])
+    println(i, '\t', f(x0)[1])
 end

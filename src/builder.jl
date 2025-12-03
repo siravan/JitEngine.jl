@@ -17,9 +17,22 @@ is_integer(x) = is_number(x) && round(x) == x
 
 is_matrix(xs) = any(x -> size(x) != (), xs)
 
+function fold_times(xs)
+    n = length(xs)
+    if n == 0
+        return 1
+    elseif n == 1
+        return xs[1]
+    elseif n == 2
+        return times(xs[1], xs[2])
+    else
+        return times(xs[1], apply_rename(xs[2:end]))
+    end
+end
+
 rules_rename = [
     @rule +(~~xs) => foldl(plus, ~~xs)
-    @rule ~x * ~y => times(~x, ~y)
+    @rule *(~~xs) => foldl(times, ~~xs)
     @rule ~x - ~y => minus(~x, ~y)
     @rule ~x / ~y => divide(~x, ~y)
     @rule ^(~x, ~y) => power(~x, ~y)
@@ -32,7 +45,7 @@ rules_rename = [
     @rule ~x != ~y => neq(~x, ~y)
 ]
 
-apply_rename(eq) = Prewalk(PassThrough(Chain(rules_rename)))(value(eq))
+apply_rename(eq) = Fixpoint(PassThrough(Chain(rules_rename)))(value(eq))
 
 ################### Rewrite Operators #######################
 
@@ -79,6 +92,7 @@ apply_rewrite(eq) = Postwalk(PassThrough(Chain(rules_rewrite)))(value(eq))
 @syms unicast(op::Symbol, x::Any) bincast(op::Symbol, x::Any, y::Any)
 @syms reducer(f::Any, op::Symbol, x::Any)
 @syms adjoint_(x::Any)
+@syms inv_(x::Any)
 @syms as_scalar(x::Any)
 
 # @syms arrayop(output_idx::Any, expr::Any, reduce::Any, shape::Any)
@@ -119,12 +133,13 @@ rules_codify = [
     @rule sqrt(~x) => uniop(0, :sqrt, rewrite(~x))
     @rule cbrt(~x) => unicall(:cbrt, rewrite(~x))
     @rule adjoint(~x) => adjoint_(rewrite(~x))
+    @rule inv(~x) => inv_(rewrite(~x))
     @rule broadcast(~op, ~x) => unicast(Symbol(~op), rewrite(~x))
     @rule broadcast(~op, ~x, ~y) => bincast(Symbol(~op), rewrite(~x), rewrite(~y))
     @rule Symbolics._mapreduce(~f, ~op, ~x, ~a, ~b) =>
         reducer(~f, Symbol(~op), rewrite(~x))
     @rule getindex(~arr, 1) => as_scalar(rewrite(~arr))
-    @rule ifelse(~cond, ~x, ~y) => ternary(0, ~cond, rewrite(~x), rewrite(~y))
+    @rule ifelse(~cond, ~x, ~y) => ternary(0, rewrite(~cond), rewrite(~x), rewrite(~y))
     @rule (~f)(~x) => unicall(Symbol(~f), rewrite(~x))
 ]
 
@@ -182,7 +197,7 @@ diff_name(i) = "δ$(i-1)"
 #       a single state variable. It can be empty.
 #   params: (optional)
 #
-function build(t, states, obs, diffs; params = [], unroll = true)
+function build(t, states, obs, diffs; params = [], unroll = false)
     eqs = Any[]
     syms = SymbolTable()
 
@@ -298,12 +313,14 @@ function propagate(builder::Builder, eq)
             return propagate_reduce(builder, eq)
         elseif head == adjoint_
             return propagate_adjoint(builder, eq)
+        elseif head == inv_
+            return propagate_inv(builder, eq)
         elseif head == as_scalar
             return propagate_as_scalar(builder, eq)
         elseif head == getindex
             return eq
         else
-            error("unreachable section")
+            error("cannot build $eq")
         end
     else
         return eq
@@ -484,16 +501,6 @@ function propagate_bincast(builder::Builder, eq)
     return arr_t
 end
 
-function propagate_adjoint(builder::Builder, eq)
-    x = arguments(eq)[1]
-    x = propagate(builder, unref(x))
-
-    m, n = mat_size(x)
-    t = new_temp!(builder, (n, m))
-    push!(builder.eqs, set_adjoint(t, x, (m, n)))
-    return t
-end
-
 function propagate_reduce(builder::Builder, eq)
     label = ".L$(builder.count_loops)"
     builder.count_loops += 1
@@ -518,6 +525,31 @@ function propagate_reduce(builder::Builder, eq)
         push!(builder.eqs, branch_if(n-1, label))
     end
 
+    return t
+end
+
+function propagate_adjoint(builder::Builder, eq)
+    x = arguments(eq)[1]
+    x = propagate(builder, unref(x))
+
+    m, n = mat_size(x)
+    t = new_temp!(builder, (n, m))
+    push!(builder.eqs, set_adjoint(t, x, (m, n)))
+    return t
+end
+
+function propagate_inv(builder::Builder, eq)
+    x = arguments(eq)[1]
+    x = propagate(builder, unref(x))
+
+    if size(x) == ()
+        return propagate_binop(builder, binop(0, :divide, 1.0, x))
+    end
+
+    m, n = mat_size(x)
+    @assert m == n
+    t = new_temp!(builder, (m, m))
+    push!(builder.eqs, set_inv(t, x, (m, m)))
     return t
 end
 

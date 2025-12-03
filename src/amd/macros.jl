@@ -363,3 +363,29 @@ function adjoint(dst, x, shape)
 
     return shape
 end
+
+function inv(dst, x, shape)
+    m, _ = shape
+
+    @static if Sys.iswindows()
+        mov_imm(RAX, dst)
+        lea_indexed(RCX, MEM, RAX, 8)
+
+        mov_imm(RAX, x)
+        lea_indexed(RDX, MEM, RAX, 8)
+
+        mov_imm(R8, m)
+    else
+        mov_imm(RAX, dst)
+        lea_indexed(RDI, MEM, RAX, 8)
+
+        mov_imm(RAX, x)
+        lea_indexed(RSI, MEM, RAX, 8)
+
+        mov_imm(RDX, m)
+    end
+
+    call_op(:inv)
+
+    return shape
+end

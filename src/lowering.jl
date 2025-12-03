@@ -46,6 +46,7 @@ function lower(builder::Builder)
 
     add_func(mir, :matmul)
     add_func(mir, :adjoint)
+    add_func(mir, :inv)
 
     for eq in builder.eqs
         if eq isa Equation

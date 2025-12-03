@@ -38,7 +38,7 @@ using .Arm
     end
 elseif Sys.ARCH == :aarch64
     Cpu = Arm
-    const CLOBBERED_REGS = 8
+    const CLOBBERED_REGS = 16
 else
     const CLOBBERED_REGS = 16
     @warn "unrecognized architecture: $(Sys.ARCH)"

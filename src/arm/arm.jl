@@ -362,3 +362,19 @@ function adjoint(dst, x, shape)
 
     return shape
 end
+
+function inv(dst, x, shape)
+    m, _ = shape
+
+    load_immediate(0, dst)
+    add_x(0, MEM, 0, true)
+
+    load_immediate(1, x)
+    add_x(1, MEM, 1, true)
+
+    load_immediate(2, m)
+
+    call_op(:inv)
+
+    return shape
+end

@@ -11,18 +11,18 @@ const N = 500
 
 @variables a b
 
-function manderbrot(a, b)
+function manderbrot(a, b; n = 10)
     x = a
     y = b
 
-    for i = 1:10
+    for i = 1:n
         x, y = (x^2 - y^2 + a, 2 * x * y + b)
     end
 
     return [x, y]
 end
 
-f = compile_func([a, b], manderbrot(a, b))
+f = compile_func([a, b], manderbrot(a, b); unroll = true)
 
 X = zeros(N*N, 2)
 

@@ -185,7 +185,7 @@ function compile_func(f::Function; kw...)
     return compile_build(FastFunc, builder; kw...)
 end
 
-function compile_func(states, obs; params = [], unroll = true, kw...)
+function compile_func(states, obs; params = [], unroll = false, kw...)
     builder = build(nothing, states, obs, []; unroll, params)
 
     if any(Symbolics.is_array_of_symbolics, states)
