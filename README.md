@@ -38,19 +38,7 @@ f = compile_func([x, y], [x+y, x*y, x^3])
 @assert f(3, 2) == [5.0, 6.0, 27.0]
 ```
 
-Here, `f` accepts 2 `= length(states)` values as input and returns an array of size 3 `= length(obs)` of doubles.
-
-`compile_func` also does automatic vectorization. Vectorization is activated by passing a 2D array of size `num_of_samples x num_of_states` to `f`:
-
-```julia
-X = rand(1000, 2)
-
-@assert f(X)[:, 1] == X[:, 1] .+ X[:, 2]
-@assert f(X)[:, 2] == X[:, 1] .* X[:, 2]
-@assert f(X)[:, 3] == X[:, 1] .^ 3
-```
-
-We can also pass a Julia function to `compile_func`. The Julia function should accept one or more scalar double values and returns a double result. `compile_func` converts the function to an equivalent symbolic form; therefore, the function is restricted to a subset of possible Julia functions. Specially, it can only have constant loops and conditions should be through `IfElse.ifelse`.
+Here, `f` accepts 2 `= length(states)` values as input and returns an array of size 3 `= length(obs)` of doubles. We can also pass a Julia function to `compile_func`. The Julia function should accept one or more scalar double values and returns a double result. `compile_func` converts the function to an equivalent symbolic form; therefore, the function is restricted to a subset of possible Julia functions. Specially, it can only have constant loops and conditions should be through `IfElse.ifelse`.
 
 ```julia
 h(x, y, z) = x + y * z
@@ -195,17 +183,15 @@ y = rand(size(Y)...)
 @assert(f(2.0, x, y)[1] ≈ (x .^ 2) * y)
 ```
 
-`compile_func` accepts an optional parameter `unroll` (boolean, default `false`), which specifies how symbolic arrays are compiled. 
-If `unroll = true`, *JitEngine* uses Symbolics `scalarize` to convert the symblolic arrays to arrays of symbolic scalar variables. 
-However, if `unroll = false`, *JitEngine* works directly on the symbolic arrays and emits appropriate looping constructs to process them.
-Threefore, `unroll = true` is preferable for relatively small arrays (up to a few hundred elements), whereas `unroll = true` can work for 
-large arrays (millions of elements).
+As of version 0.3, `compile_func` accepts an optional parameter `unroll` (boolean, default `false`), which specifies how symbolic arrays are compiled. 
+If `unroll = true`, *JitEngine* uses Symbolics `scalarize` to convert symbolic arrays to arrays of symbolic scalar variables. However, 
+if `unroll = false`, *JitEngine* works directly on the symbolic arrays and emits appropriate looping constructs to process them. As a rule of thumb, 
+`unroll = true` is preferable for relatively small arrays (up to a few hundred elements), whereas `unroll = true` can work for large arrays (up to millions of elements).
 
 The following example uses symbolic arrays with `unroll = false` to draw the Mandelbrot set:
 
 ```julia
 using JitEngine
-
 using Symbolics
 using Plots
 
@@ -241,3 +227,20 @@ heatmap(m .< 4.0; aspect_ratio = :equal)
 The output is
 
 ![mendelbrot](./figures/mandelbrot.png)
+
+### Helper Functions
+
+Currently, `.^` operator does not consistently work with symbolic arrays, especially for integer powers. Instead, the 
+preferred method is to helper functions `JitEngine.square`, `JitEngine.cube`, and `JitEngine.power`. For example,
+
+```julia
+using JitEngine
+using Symbolics
+
+@variables X[1:2,1:2]
+
+f = compile_func([X], [JitEngine.power.(X, 5) * JitEngine.cube.(X)])
+
+A = [1.0 2.0; 3.0 4.0]
+@assert f(A)[1] == A .^ 5 * A .^ 3
+```
